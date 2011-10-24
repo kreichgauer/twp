@@ -54,7 +54,7 @@ class Transport(threading.Thread):
 		"""Start the send/recv cycle."""
 		# Consider auto-starting
 		super(Transport, self).start()
-		self.protocol.on_connect()
+		self.protocol._on_connect()
 
 	def stop(self):
 		"""Tell the thread to stop its send/recv cycle. Ultimately close the 
