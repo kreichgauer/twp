@@ -3,56 +3,61 @@ import struct
 class BaseType(object):
 	"""Abstract base class for TWP types."""
 
+	def __init__(self):
+		self.value = None
+
+	def __init__(self, value):
+		self.value = value
+
 	@property
 	def tag(self):
 		"""The types tag."""
 		raise NotImplementedError
+	
+	@classmethod
+	def unmarshal(self, value):
+		"""Factory method that returns an initialized instance from a marshaled
+		byte representation."""
+		return self()
 
-	def decode(self, value):
-		raise NotImplementedError
-
-	def encode(self, value):
+	def marshal(self):
 		return chr(self.tag) + value
 
 
-class EndOfContentType(BaseType):
-	tag = 0
+class EmptyType(BaseType):
+	"""Stub for types whose instances don't have a value."""
+	
+	def __init__(self, value):
+		raise ValueError("No value expected.")
 
-	def decode(self, value):
+	@classmethod
+	def unmarshal(self, value):
 		# FIXME ??? Allow None? Disallow ""?
-		if val != "":
+		if value not in (None, ""):
 			raise ValueError("No value expected.")
-		return val
+		return self()
 
-	def encode(self, value):
-		if val != ""
+	def marshal(self):
+		if not self.value is None:
 			raise ValueError("No value expected.")
-		return super(EndOfContentType, self).encode(value)
+		return super(EmptyType, self).marshal("")
 
 
-class NoValueType(BaseType):
+class EndOfContent(EmptyType):
 	tag = 0
 
-	def decode(self, value):
-		if val != "":
-			raise ValueError("No value expected.")
-		return val
 
-	def encode(self, value):
-		if val != ""
-			raise ValueError("No value expected.")
-		return super(NoValueType, self).encode(value)
+class NoValue(EmptyType):
+	tag = 1
 
 
-class StructType(BaseType):
+class Struct(BaseType):
 	tag = 2
-
 	# TODO implement
 
 
-class SequenceType(BaseType):
+class Sequence(BaseType):
 	tag = 3
-
 	# TODO implement
 
 
@@ -65,37 +70,38 @@ class MessageType(BaseType):
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
 
-	# TODO implement: parameters, decode, encode, ...
+	# TODO implement: parameters, unmarshal, marshal, ...
 
 
-class RegisteredExtensionType(BaseType):
+class RegisteredExtension(BaseType):
 	tag = 12
 
 	# TODO implement
 
 
-class IntegerType(BaseType):
+class Integer(BaseType):
 	format_string = None
 
-	def decode(self, value):
+	@classmethod
+	def unmarshal(self, value):
 		try:
 			return struct.unpack(self.format_string, value)[0]
 		except struct.error:
 			raise ValueError("Integer value out of bounds")
 
-	def encode(self, value):
+	def marshal(self):
 		try:
 			return struct.pack(self.format_string, value)
 		except struct.error:
 			raise ValueError("Integer value out of bounds")		
 
 
-class ShortIntegerType(IntegerType):
+class ShortInteger(IntegerType):
 	tag = 13
 	format_string = '>b' # big endian, signed short / 1 byte
 
 
-class LongIntegerType(IntegerType):
+class LongInteger(IntegerType):
 	tag = 14
 	format_string = '>l' # big endian, signed long / 4 bytes
 

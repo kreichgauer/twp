@@ -70,7 +70,6 @@ class Transport(threading.Thread):
 			while not self._should_stop():
 				rlist = xlist = [self._socket]
 				wlist = rlist if len(self._send_buffer) else []
-				# TODO pass timeout and implement shutdown
 				rlist, wlist, xlist = select.select(rlist, wlist, xlist, 
 					SELECT_TIMEOUT)
 				for socket in rlist:
