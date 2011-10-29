@@ -1,3 +1,4 @@
+import collections
 import struct
 
 class BaseType(object):
@@ -26,7 +27,6 @@ class BaseType(object):
 
 class EmptyType(BaseType):
 	"""Stub for types whose instances don't have a value."""
-	
 	def __init__(self, value):
 		raise ValueError("No value expected.")
 
@@ -73,28 +73,33 @@ class Field(BaseType):
 
 class MessageBase(type):
 	"""Metaclass for all Messages."""
-	def __init__(cls, name, bases, attrs):
-		cls._fields = dict()
+	@classmethod
+	def __prepare__(metacls, name, bases, **kwargs):
+		# Use an OrderedDict as __dict__, so that the marshaling order of 
+		# Message fields is the order in which they have been declared.
+		return collections.OrderedDict()
+
+	def __new__(metacls, name, bases, attrs):
+		cls = type.__new__(metacls, name, bases, attrs)
+		cls._fields = collections.OrderedDict()
 		# Copy all Field-type attributes to _fields and initialize the original 
 		# attributes with None
 		# TODO Raise if any of the Fields override superclass attributes
-		for k, v in attrs.iteritems():
+		for k, v in attrs.items():
 			if isinstance(v, Field):
 				cls._fields[k] = v
 				v.name = v.name or k
 				setattr(cls, k, None)
-		return type.__init__(cls, name, bases, attrs)
+		return cls
 
 
-class Message(EmptyType):
-	__metaclass__ = MessageBase
-
+class Message(EmptyType, metaclass=MessageBase):
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
 	def update_fields(self, **kwargs):
 		# TODO input check
-		for k, v in kwargs.iteritems():
+		for k, v in kwargs.items():
 			setattr(self, k, v)
 
 	@property

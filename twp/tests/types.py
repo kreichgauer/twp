@@ -6,6 +6,7 @@ class ExampleMessage(types.Message):
 	fieldA = types.Field(types.String, optional=True)
 	fieldB = types.Field(types.Int, name="_fieldB")
 
+
 class FieldTest(unittest.TestCase):
 	def setUp(self):
 		pass
@@ -27,6 +28,7 @@ class FieldTest(unittest.TestCase):
 	def testOptional(self):
 		self.assertEquals(types.Field(types.String).optional, False)
 		self.assertEquals(types.Field(types.String, optional=True).optional, True)
+
 
 class MessageTest(unittest.TestCase):
 	def setUp(self):
