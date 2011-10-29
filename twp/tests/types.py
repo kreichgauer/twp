@@ -2,6 +2,7 @@ import unittest
 from twp import types
 
 class ExampleMessage(types.Message):
+	identifier = 1
 	fieldA = types.Field(types.String, optional=True)
 	fieldB = types.Field(types.Int, name="_fieldB")
 
@@ -22,5 +23,16 @@ class MessageTest(unittest.TestCase):
 		self.assertIsNone(m.fieldB)
 		self.assertIsInstance(m._fields['fieldB'], types.Field)
 
-if __name__ == '__main__':
+	def testIdentifierAndTag(self):
+		baseMessage = types.Message()
+		self.assertRaises(ValueError, lambda: baseMessage.identifier)
+		message = ExampleMessage()
+		self.assertEquals(message.identifier, 1)
+		self.assertEquals(message.tag, 5) # 5 + message.identifier
+
+
+def runTests():
 	unittest.main()
+
+if __name__ == '__main__':
+	runTests()

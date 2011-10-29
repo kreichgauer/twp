@@ -86,7 +86,6 @@ class MessageBase(type):
 
 class Message(EmptyType):
 	__metaclass__ = MessageBase
-	identifier = None
 
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
@@ -95,6 +94,10 @@ class Message(EmptyType):
 		# TODO input check
 		for k, v in kwargs.iteritems():
 			setattr(self, k, v)
+
+	@property
+	def identifier(self):
+		raise ValueError("Message without identifier.")
 
 	@property
 	def tag(self):
