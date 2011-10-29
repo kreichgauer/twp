@@ -72,9 +72,11 @@ class Field(BaseType):
 
 
 class MessageBase(type):
-
+	"""Metaclass for all Messages."""
 	def __init__(cls, name, bases, attrs):
 		cls._fields = dict()
+		# Copy all Field-type attributes to _fields and initialize the original 
+		# attributes with None
 		# TODO Raise if any of the Fields override superclass attributes
 		for k, v in attrs.iteritems():
 			if isinstance(v, Field):
@@ -97,10 +99,13 @@ class Message(EmptyType):
 
 	@property
 	def identifier(self):
+		"""Set to the Message's identifier, which must be in range(0,7)."""
 		raise ValueError("Message without identifier.")
 
 	@property
 	def tag(self):
+		"""The Message's tag. This equals 4 plus the identifier. Raises a 
+		ValueError if the identifier is larger than 7."""
 		if self.identifier > 7:
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
