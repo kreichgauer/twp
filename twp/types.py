@@ -15,7 +15,7 @@ class BaseType(object):
 		raise NotImplementedError
 	
 	@classmethod
-	def unmarshal(self, value):
+	def unmarshal(self, tag, value):
 		"""Factory method that returns an initialized instance from a marshaled
 		byte representation."""
 		return self()
@@ -31,7 +31,7 @@ class EmptyType(BaseType):
 		raise ValueError("No value expected.")
 
 	@classmethod
-	def unmarshal(self, value):
+	def unmarshal(self, tag, value):
 		# FIXME ??? Allow None? Disallow ""?
 		if value not in (None, ""):
 			raise ValueError("No value expected.")
@@ -61,8 +61,40 @@ class Sequence(BaseType):
 	# TODO implement
 
 
-class MessageType(BaseType):
+class Field(BaseType):
+	def __init__(self, type, name=None, optional=False):
+		self.type = type
+		self.name = name
+		self.optional = optional
+
+	def unmarshal():
+		pass
+
+
+class MessageBase(type):
+
+	def __init__(cls, name, bases, attrs):
+		cls._fields = dict()
+		# TODO Raise if any of the Fields override superclass attributes
+		for k, v in attrs.iteritems():
+			if isinstance(v, Field):
+				cls._fields[k] = v
+				v.name = v.name or k
+				setattr(cls, k, None)
+		return type.__init__(cls, name, bases, attrs)
+
+
+class Message(EmptyType):
+	__metaclass__ = MessageBase
 	identifier = None
+
+	def __init__(self, **kwargs):
+		self.update_fields(**kwargs)
+
+	def update_fields(self, **kwargs):
+		# TODO input check
+		for k, v in kwargs.iteritems():
+			setattr(self, k, v)
 
 	@property
 	def tag(self):
@@ -70,20 +102,25 @@ class MessageType(BaseType):
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
 
-	# TODO implement: parameters, unmarshal, marshal, ...
+	def marshal(self):
+		marshalled = super(Message, self).marshal()
+		for type_, name, optional in self.fields_descr:
+			field = self.fields[name]
+			marshalled += field.marshal()
+		marshalled += EndOfContent().marshal()
+		return marshalled
 
 
 class RegisteredExtension(BaseType):
 	tag = 12
-
 	# TODO implement
 
 
-class Integer(BaseType):
+class IntegerBase(BaseType):
 	format_string = None
 
 	@classmethod
-	def unmarshal(self, value):
+	def unmarshal(self, tag, value):
 		try:
 			return struct.unpack(self.format_string, value)[0]
 		except struct.error:
@@ -96,23 +133,33 @@ class Integer(BaseType):
 			raise ValueError("Integer value out of bounds")		
 
 
-class ShortInteger(IntegerType):
+class ShortInteger(IntegerBase):
 	tag = 13
 	format_string = '>b' # big endian, signed short / 1 byte
 
 
-class LongInteger(IntegerType):
+class LongInteger(IntegerBase):
 	tag = 14
 	format_string = '>l' # big endian, signed long / 4 bytes
 
 
+class Int(BaseType):
+	@classmethod
+	def unmarshal(self, tag, value):
+		pass
+
+
+class String(BaseType):
+	pass
+
+
 builtin_types = [
-	EndOfContentType,
-	NoValueType,
-	StructType,
-	SequenceType,
-	RegisteredExtensionType,
-	ShortIntegerType,
-	LongIntegerType,
+	EndOfContent,
+	NoValue,
+	Struct,
+	Sequence,
+	RegisteredExtension,
+	ShortInteger,
+	LongInteger,
 	# TODO extend...
 ]
