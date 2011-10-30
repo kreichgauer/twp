@@ -4,12 +4,6 @@ import struct
 class BaseType(object):
 	"""Abstract base class for TWP types."""
 
-	def __init__(self):
-		self.value = None
-
-	def __init__(self, value):
-		self.value = value
-
 	@property
 	def tag(self):
 		"""The types tag."""
@@ -32,9 +26,15 @@ class BaseType(object):
 		return b'%s%s' % (self._marshal_tag(), self._marshal_value())
 
 
-class EmptyType(BaseType):
+class Primitive(BaseType):
+	def __init__(self, value):
+		self.value = value
+
+
+class EmptyType(Primitive):
 	"""Stub for types whose instances don't have a value."""
 	def __init__(self, value):
+		"""Use __init__()."""
 		raise ValueError("No value expected.")
 
 	@classmethod
@@ -63,23 +63,8 @@ class Struct(BaseType):
 	# TODO implement
 
 
-class Sequence(BaseType):
-	tag = 3
-	# TODO implement
-
-
-class Field(BaseType):
-	def __init__(self, type, name=None, optional=False):
-		self.type = type
-		self.name = name
-		self.optional = optional
-
-	def unmarshal():
-		pass
-
-
-class MessageBase(type):
-	"""Metaclass for all Messages."""
+class ComplextType(type):
+	"""Metaclass for all Complex classes."""
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
 		# Use an OrderedDict as __dict__, so that the marshaling order of 
@@ -100,7 +85,26 @@ class MessageBase(type):
 		return cls
 
 
-class Message(EmptyType, metaclass=MessageBase):
+class Complex(BaseType, metaclass=ComplexType):
+
+
+
+class Sequence(BaseType):
+	tag = 3
+	# TODO implement
+
+
+class Field(BaseType):
+	def __init__(self, type, name=None, optional=False):
+		self.type = type
+		self.name = name
+		self.optional = optional
+
+	def unmarshal():
+		pass
+
+
+class Message(EmptyType):
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
