@@ -1,8 +1,12 @@
 import collections
 import struct
 
-class BaseType(object):
+class Base(object):
 	"""Abstract base class for TWP types."""
+
+	def __init__(self, optional=False, name=None):
+		self._optional = optional
+		self._name = None
 
 	@property
 	def tag(self):
@@ -15,6 +19,14 @@ class BaseType(object):
 		byte representation."""
 		return self()
 
+	def is_optional(self):
+		return self._optional
+
+	def is_empty(self):
+		"""Implement to return True iff this field should not be marshalled, 
+		e.g. because no meaningful value is present."""
+		raise NotImplementedError
+
 	def _marshal_tag(self):
 		return chr(self.tag)
 
@@ -22,20 +34,40 @@ class BaseType(object):
 		"""Implement to return a byte string with the marshalled value."""
 		raise NotImplementedError
 
+	def _marshal_no_value(self):
+		"""Implement to return a byte string with the marshalled value."""
+		return NoValue().marshal()
+
 	def marshal(self):
+		if self.is_empty():
+			if not self.is_optional():
+				raise ValueError("Non-optional empty field.")
+			return self._marshal_no_value()
 		return b'%s%s' % (self._marshal_tag(), self._marshal_value())
 
 
-class Primitive(BaseType):
-	def __init__(self, value):
+class Primitive(Base):
+	def __init__(self, value=None, **kwargs):
+		super(Primitive, self).__init__(self, **kwargs)
 		self.value = value
 
+	def is_empty(self):
+		return self.value is not None
 
-class EmptyType(Primitive):
+
+class NoValueBase(Primitive):
 	"""Stub for types whose instances don't have a value."""
-	def __init__(self, value):
-		"""Use __init__()."""
-		raise ValueError("No value expected.")
+	@property
+	def value(self):
+		return None
+
+	@value.setter
+	def value(self, value):
+		if not value is None:
+			raise ValueError("None expected as value")
+
+	def is_empty(self):
+		return False		
 
 	@classmethod
 	def unmarshal(self, tag, value):
@@ -45,25 +77,18 @@ class EmptyType(Primitive):
 		return self()
 
 	def _marshal_value(self):
-		if not self.value is None:
-			raise ValueError("No value expected.")
-		return ""
+		return b""
 
 
-class EndOfContent(EmptyType):
+class EndOfContent(NoValueBase):
 	tag = 0
 
 
-class NoValue(EmptyType):
+class NoValue(NoValueBase):
 	tag = 1
 
 
-class Struct(BaseType):
-	tag = 2
-	# TODO implement
-
-
-class ComplextType(type):
+class ComplexType(type):
 	"""Metaclass for all Complex classes."""
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
@@ -75,44 +100,69 @@ class ComplextType(type):
 		cls = type.__new__(metacls, name, bases, attrs)
 		cls._fields = collections.OrderedDict()
 		# Copy all Field-type attributes to _fields and initialize the original 
-		# attributes with None
-		# TODO Raise if any of the Fields override superclass attributes
+		# attributes with None.
 		for k, v in attrs.items():
-			if isinstance(v, Field):
+			if isinstance(v, Base):
+				if metacls.bases_have_attr(bases, k):
+					raise ValueError("%s.%s overrides a member of a base class."
+						% (cls.__name__, k))
 				cls._fields[k] = v
 				v.name = v.name or k
 				setattr(cls, k, None)
 		return cls
 
-
-class Complex(BaseType, metaclass=ComplexType):
-
-
-
-class Sequence(BaseType):
-	tag = 3
-	# TODO implement
+	def bases_have_attr(metacls, bases, attr):
+		for base in bases:
+			if hasattr(base, attr):
+				return True
+		return False
 
 
-class Field(BaseType):
-	def __init__(self, type, name=None, optional=False):
-		self.type = type
-		self.name = name
-		self.optional = optional
-
-	def unmarshal():
-		pass
-
-
-class Message(EmptyType):
+class Complex(Base, metaclass=ComplexType):
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
 	def update_fields(self, **kwargs):
 		# TODO input check
 		for k, v in kwargs.items():
+			is_field = hasattr(self, k) and \
+				isinstance(getattr(self, k), Base)
+			if not is_field:
+				raise ValueError("No field named %s" % k)
 			setattr(self, k, v)
 
+	def _marshal_value(self):
+		marshalled = super(Complex, self).marshal()
+		for name, field in self._fields.items():
+			field.marshal()
+		# TODO extensions?
+		marshalled += EndOfContent().marshal()
+		return marshalled
+
+	def is_empty(self):
+		for name, field in self._fields.items():
+			if not field.is_optional() and not field.is_empty():
+				return False
+		return True
+
+	def __setattr__(self, k, v):
+		field = self._fields.get(k)
+		if not field is None:
+			field.value = v
+		setattr(self, k, v)
+
+
+class Struct(Complex):
+	tag = 2
+	# TODO implement
+
+
+class Sequence(Complex):
+	tag = 3
+	# TODO implement
+
+
+class Message(Complex):
 	@property
 	def identifier(self):
 		"""Set to the Message's identifier, which must be in range(0,7)."""
@@ -126,21 +176,13 @@ class Message(EmptyType):
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
 
-	def _marshal_value(self):
-		marshalled = super(Message, self).marshal()
-		for type_, name, optional in self.fields_descr:
-			field = self.fields[name]
-			marshalled += field.marshal()
-		marshalled += EndOfContent().marshal()
-		return marshalled
 
-
-class RegisteredExtension(BaseType):
+class RegisteredExtension(Base):
 	tag = 12
 	# TODO implement
 
 
-class IntegerBase(BaseType):
+class IntegerBase(Primitive):
 	format_string = None
 
 	@classmethod
@@ -167,23 +209,15 @@ class LongInteger(IntegerBase):
 	format_string = '>l' # big endian, signed long / 4 bytes
 
 
-class Int(BaseType):
+class Int(Primitive):
 	@classmethod
 	def unmarshal(self, tag, value):
 		pass
 
 
-class String(BaseType):
-	pass
+class String(Primitive):
+	# TODO implement Short Strings vs. Long Strings
+	tag = 127
 
-
-builtin_types = [
-	EndOfContent,
-	NoValue,
-	Struct,
-	Sequence,
-	RegisteredExtension,
-	ShortInteger,
-	LongInteger,
-	# TODO extend...
-]
+	def _marshal_value(self):
+		return self.value.decode('utf-8')
