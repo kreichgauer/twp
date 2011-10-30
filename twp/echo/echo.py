@@ -1,4 +1,20 @@
 from .. import protocol
+from .. import types
+
+class Request(types.Message):
+	identifier = 0
+	fields_descr = [
+		(types.String, "text", False),
+	]
+
+
+class Response(types.Message):
+	identifier = 1
+	fields_descr = [
+		(types.String, "text", False),
+		(types.Int, "number_of_letters", False),
+	]
+
 
 class EchoProtocol(protocol.BaseProtocol):
 
