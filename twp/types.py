@@ -6,7 +6,7 @@ class Base(object):
 
 	def __init__(self, optional=False, name=None):
 		self._optional = optional
-		self._name = None
+		self.name = name
 
 	@property
 	def tag(self):
@@ -48,7 +48,7 @@ class Base(object):
 
 class Primitive(Base):
 	def __init__(self, value=None, **kwargs):
-		super(Primitive, self).__init__(self, **kwargs)
+		super(Primitive, self).__init__(**kwargs)
 		self.value = value
 
 	def is_empty(self):
@@ -111,7 +111,7 @@ class ComplexType(type):
 				setattr(cls, k, None)
 		return cls
 
-	def bases_have_attr(metacls, bases, attr):
+	def bases_have_attr(bases, attr):
 		for base in bases:
 			if hasattr(base, attr):
 				return True
@@ -125,8 +125,7 @@ class Complex(Base, metaclass=ComplexType):
 	def update_fields(self, **kwargs):
 		# TODO input check
 		for k, v in kwargs.items():
-			is_field = hasattr(self, k) and \
-				isinstance(getattr(self, k), Base)
+			is_field = isinstance(self._fields.get(k), Base)
 			if not is_field:
 				raise ValueError("No field named %s" % k)
 			setattr(self, k, v)
@@ -149,7 +148,7 @@ class Complex(Base, metaclass=ComplexType):
 		field = self._fields.get(k)
 		if not field is None:
 			field.value = v
-		setattr(self, k, v)
+		super(Complex, self).__setattr__(k, v)
 
 
 class Struct(Complex):

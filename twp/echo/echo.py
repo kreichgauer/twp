@@ -3,17 +3,13 @@ from .. import types
 
 class Request(types.Message):
 	identifier = 0
-	fields_descr = [
-		(types.String, "text", False),
-	]
+	text = types.String()
 
 
 class Response(types.Message):
 	identifier = 1
-	fields_descr = [
-		(types.String, "text", False),
-		(types.Int, "number_of_letters", False),
-	]
+	text = types.String()
+	number_of_letters = types.Int()
 
 
 class EchoProtocol(protocol.BaseProtocol):
@@ -25,11 +21,8 @@ class EchoProtocol(protocol.BaseProtocol):
 	]
 
 	def on_connect(self):
-		self._send(b'\x04')
-		echo_req = 'ping'
-		tag = chr(17 + len(echo_req))
-		self._send(b'' + tag  + echo_req)
-		self._send(b'\x00')
+		ping = Request(text="Hello, World!")
+		self.send(ping)
 	
 	def on_data(self, data):
 		log.debug('Data received: %r' % data)
