@@ -21,8 +21,15 @@ class BaseType(object):
 		byte representation."""
 		return self()
 
+	def _marshal_tag(self):
+		return chr(self.tag)
+
+	def _marshal_value(self):
+		"""Implement to return a byte string with the marshalled value."""
+		raise NotImplementedError
+
 	def marshal(self):
-		return chr(self.tag) + value
+		return b'%s%s' % (self._marshal_tag(), self._marshal_value())
 
 
 class EmptyType(BaseType):
@@ -37,10 +44,10 @@ class EmptyType(BaseType):
 			raise ValueError("No value expected.")
 		return self()
 
-	def marshal(self):
+	def _marshal_value(self):
 		if not self.value is None:
 			raise ValueError("No value expected.")
-		return super(EmptyType, self).marshal("")
+		return ""
 
 
 class EndOfContent(EmptyType):
@@ -115,7 +122,7 @@ class Message(EmptyType, metaclass=MessageBase):
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
 
-	def marshal(self):
+	def _marshal_value(self):
 		marshalled = super(Message, self).marshal()
 		for type_, name, optional in self.fields_descr:
 			field = self.fields[name]
@@ -139,7 +146,7 @@ class IntegerBase(BaseType):
 		except struct.error:
 			raise ValueError("Integer value out of bounds")
 
-	def marshal(self):
+	def _marshal_value(self):
 		try:
 			return struct.pack(self.format_string, value)
 		except struct.error:
