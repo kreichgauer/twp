@@ -3,6 +3,7 @@ import struct
 
 class Base(object):
 	"""Abstract base class for TWP types."""
+	tag = None
 
 	def __init__(self, optional=False, name=None):
 		self._optional = optional
@@ -39,35 +40,25 @@ class Base(object):
 		return NoValue().marshal()
 
 	def marshal(self):
+		"""Concats `_marshal_tag()` and `_marshal_value()` if `is_empty()` 
+		returns False. Otherwise, a NoValue is marshalled if the instace is
+		optional, a ValueError is raised else."""
 		if self.is_empty():
 			if not self.is_optional():
 				raise ValueError("Non-optional empty field.")
 			return self._marshal_no_value()
 		return b'%s%s' % (self._marshal_tag(), self._marshal_value())
 
+	def handles_tag(self, tag):
+		"""Implement to return True iff the class should be used for 
+		unmarshalling a field with the given tag."""
+		return not tag is None and self.tag == tag
 
-class Primitive(Base):
-	def __init__(self, value=None, **kwargs):
-		super(Primitive, self).__init__(**kwargs)
-		self.value = value
 
+class NoValueBase(Base):
+	"""Stub for Primitives whose instances don't have a value."""
 	def is_empty(self):
-		return self.value is not None
-
-
-class NoValueBase(Primitive):
-	"""Stub for types whose instances don't have a value."""
-	@property
-	def value(self):
-		return None
-
-	@value.setter
-	def value(self, value):
-		if not value is None:
-			raise ValueError("None expected as value")
-
-	def is_empty(self):
-		return False		
+		return False
 
 	@classmethod
 	def unmarshal(self, tag, value):
@@ -181,6 +172,16 @@ class RegisteredExtension(Base):
 	# TODO implement
 
 
+class Primitive(Base):
+	"""Abstract class for primitive types, i.e. types with a scalar value."""
+	def __init__(self, value=None, **kwargs):
+		super(Primitive, self).__init__(**kwargs)
+		self.value = value
+
+	def is_empty(self):
+		return self.value is not None
+
+
 class IntegerBase(Primitive):
 	format_string = None
 
@@ -220,3 +221,26 @@ class String(Primitive):
 
 	def _marshal_value(self):
 		return self.value.decode('utf-8')
+
+
+def unmarshal(data):
+	tag, value = data[0], data[1:]
+	unmarshalled = None
+	for cls in all_types:
+		if cls.handles_tag(tag):
+			unmarshalled = cls.unmarshal(tag, value)
+			break
+	if unmarshalled is None:
+		raise ValueError("No suitable marshalling class found.")
+	return unmarshalled
+
+
+all_types = [
+	EndOfContent,
+	NoValue,
+	Struct,
+	Sequence,
+	RegisteredExtension,
+	Int,
+	String,
+]
