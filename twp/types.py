@@ -1,7 +1,10 @@
+# FIXME rename this module
+
 import collections
 import struct
 
 class Base(object):
+	# FIXME find a better class name
 	"""Abstract base class for TWP types."""
 	tag = None
 
@@ -179,40 +182,44 @@ class Primitive(Base):
 		self.value = value
 
 	def is_empty(self):
-		return self.value is not None
-
-
-class IntegerBase(Primitive):
-	format_string = None
-
-	@classmethod
-	def unmarshal(self, tag, value):
-		try:
-			return struct.unpack(self.format_string, value)[0]
-		except struct.error:
-			raise ValueError("Integer value out of bounds")
-
-	def _marshal_value(self):
-		try:
-			return struct.pack(self.format_string, value)
-		except struct.error:
-			raise ValueError("Integer value out of bounds")		
-
-
-class ShortInteger(IntegerBase):
-	tag = 13
-	format_string = '>b' # big endian, signed short / 1 byte
-
-
-class LongInteger(IntegerBase):
-	tag = 14
-	format_string = '>l' # big endian, signed long / 4 bytes
+		return self.value is None
 
 
 class Int(Primitive):
+	_formats = (
+		# tag, length, format
+		(13, 1, '>b'),
+		(14, 4, '>l'),
+	)
+
 	@classmethod
-	def unmarshal(self, tag, value):
-		pass
+	def _unpack_with_format(cls, format, value):
+		return cls(struct.unpack(format, value)[0])
+
+	@classmethod
+	def unmarshal(cls, tag, value):
+		length = len(value)
+		for tag_, length_, format in cls._formats:
+			if tag == tag_ and length == length_:
+				return cls._unpack_with_format(format, value)
+		raise ValueError("Invalid tag length pair (%d, %d)" % tag, length)
+
+	def _pack_with_format(self, format):
+		return struct.pack(format, self.value)
+
+	def marshal(self):
+		for tag, length, format in self._formats:
+			try:
+				value = self._pack_with_format(format)
+				tag = bytes([tag])
+				return b"".join([tag, value])
+			except struct.error:
+				pass
+		raise ValueError("Integer value out of bounds")	
+			
+	def handles_tag(tag):
+		all_tags = [t for t, l, f in self._formats]
+		return tag in all_tags
 
 
 class String(Primitive):
