@@ -1,5 +1,4 @@
-from .. import protocol
-from .. import types
+from .. import log, protocol, types, transport
 
 class Request(types.Message):
 	identifier = 0
@@ -12,12 +11,11 @@ class Response(types.Message):
 	number_of_letters = types.Int()
 
 
-class EchoProtocol(protocol.BaseProtocol):
-
+class Protocol(protocol.BaseProtocol):
 	protocol_id = 2
 	message_types = [
-		RequestMessage,
-		ResponseMessage,
+		Request,
+		Response,
 	]
 
 	def on_connect(self):
@@ -29,3 +27,7 @@ class EchoProtocol(protocol.BaseProtocol):
 
 	def on_end(self):
 		pass
+
+
+class Transport(transport.Transport):
+	protocol_class = Protocol

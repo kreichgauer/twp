@@ -1,6 +1,6 @@
-from . import log, types
+from twp import log, types
 
-TWP_MAGIC = 'TWP3\n'
+TWP_MAGIC = b"TWP3\n"
 
 class Field(object):
 	type = None
@@ -24,14 +24,15 @@ class BaseProtocol(object):
 		self.transport.send(data)
 
 	def send(self, msg):
-		data = types.marshal(msg)
-		self._send(data)
+		self._send(msg.marshal())
 
 	@property
 	def messages(self):
 		"""Returns a dict mapping ids to subclasses of `Message`."""
-		if not hasattr(self, '_messages'):
-			self._messages = dict(msg.id, msg for msg in self.message_types)
+		if not hasattr(self, "_messages"):
+			self._messages = dict(
+				((msg.id, msg) for msg in self.message_types)
+			)
 		return self._messages
 
 	@property
@@ -39,10 +40,13 @@ class BaseProtocol(object):
 		"""Returns a list of supported types for the protocol."""
 		return types.builtin_types
 
+	def _marshal_protocol_id(self):
+		return types.Int(value=self.protocol_id).marshal()
+
 	def _on_connect(self):
-		log.debug('Connected')
-		self._send(protocol.TWP_MAGIC)
-		self._send(b'\x0D' + chr(self.protocol_id))
+		log.debug("Connected")
+		self._send(TWP_MAGIC)
+		self._send(self._marshal_protocol_id())
 		self.on_connect()
 
 	def on_connect(self):

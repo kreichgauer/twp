@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import time
-from twp.transport import Transport
+from twp.echo import echo
 
-t=Transport('www.dcl.hpi.uni-potsdam.de', 80)
+t=echo.Transport('www.dcl.hpi.uni-potsdam.de', 80)
 t.start()
 while True:
 	try:
