@@ -32,7 +32,8 @@ class Base(object):
 		raise NotImplementedError
 
 	def _marshal_tag(self):
-		return chr(self.tag)
+		"""Returns a byte string containing the tag value."""
+		return bytes([self.tag])
 
 	def _marshal_value(self):
 		"""Implement to return a byte string with the marshalled value."""
@@ -50,7 +51,7 @@ class Base(object):
 			if not self.is_optional():
 				raise ValueError("Non-optional empty field.")
 			return self._marshal_no_value()
-		return b'%s%s' % (self._marshal_tag(), self._marshal_value())
+		return self._marshal_tag() + self._marshal_value()
 
 	def handles_tag(self, tag):
 		"""Implement to return True iff the class should be used for 
@@ -217,17 +218,45 @@ class Int(Primitive):
 				pass
 		raise ValueError("Integer value out of bounds")	
 			
-	def handles_tag(tag):
+	def handles_tag(self, tag):
 		all_tags = [t for t, l, f in self._formats]
 		return tag in all_tags
 
 
 class String(Primitive):
-	# TODO implement Short Strings vs. Long Strings
-	tag = 127
+	SHORT_TAG = 17
+	LONG_TAG = 127
+	MAX_LENGTH = 2**32
+
+	def encoded_value(self):
+		return self.value.encode('utf-8')
+
+	@property
+	def tag(self):
+		if self.is_long_string():
+			return self.LONG_TAG
+		else:
+			return self.SHORT_TAG + len(self.encoded_value())
+
+	def is_long_string(self):
+		return len(self.encoded_value()) > 109
+
+	def handles_tag(self, tag):
+		return tag in range(17,128)
 
 	def _marshal_value(self):
-		return self.value.decode('utf-8')
+		if self.is_long_string():
+			return self._marshal_long_value()
+		else:
+			return self.encoded_value()
+
+	def _marshal_long_value(self):
+		value = self.encoded_value()
+		if len(value) > self.MAX_LENGTH:
+			raise ValueError("Value too long for long string encoding.")
+		length = struct.pack('>I', len(value))
+		return length + value
+
 
 
 def unmarshal(data):
