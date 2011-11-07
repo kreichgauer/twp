@@ -1,6 +1,7 @@
 # FIXME rename this module
 
 import collections
+import copy
 import struct
 
 class Base(object):
@@ -114,6 +115,14 @@ class ComplexType(type):
 
 
 class Complex(Base, metaclass=ComplexType):
+	def __new__(cls, **kwargs):
+		instance = super(Complex, cls).__new__(cls)
+		# Copy all the fields to be per instance, even if defined per class
+		# This is a strange way of achieving this. Better have types.Foo() 
+		# return a class/factory instead and create the instances in __new__
+		instance._fields = copy.deepcopy(cls._fields)
+		return instance
+
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
@@ -126,9 +135,9 @@ class Complex(Base, metaclass=ComplexType):
 			setattr(self, k, v)
 
 	def _marshal_value(self):
-		marshalled = super(Complex, self).marshal()
-		for name, field in self._fields.items():
-			field.marshal()
+		marshalled = b""
+		marshalled_fields = [field.marshal() for field in self._fields.values()]
+		marshalled += b"".join(marshalled_fields)
 		# TODO extensions?
 		marshalled += EndOfContent().marshal()
 		return marshalled
