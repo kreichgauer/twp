@@ -226,7 +226,8 @@ class Int(Primitive):
 class String(Primitive):
 	SHORT_TAG = 17
 	LONG_TAG = 127
-	MAX_LENGTH = 2**32
+	MAX_SHORT_LENGTH = 109
+	MAX_LENGTH = 2**32-1
 
 	def encoded_value(self):
 		return self.value.encode('utf-8')
