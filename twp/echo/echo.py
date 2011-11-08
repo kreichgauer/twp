@@ -1,14 +1,14 @@
-from .. import log, protocol, types, transport
+from .. import log, protocol, values, transport
 
-class Request(types.Message):
+class Request(values.Message):
 	identifier = 0
-	text = types.String()
+	text = values.String()
 
 
-class Response(types.Message):
+class Response(values.Message):
 	identifier = 1
-	text = types.String()
-	number_of_letters = types.Int()
+	text = values.String()
+	number_of_letters = values.Int()
 
 
 class Protocol(protocol.BaseProtocol):

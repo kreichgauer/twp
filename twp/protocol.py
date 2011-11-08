@@ -1,5 +1,5 @@
 import threading
-from twp import log, types
+from twp import log, values
 
 TWP_MAGIC = b"TWP3\n"
 
@@ -45,7 +45,7 @@ class BaseProtocol(object):
 		raise NotImplementedError
 
 	def _marshal_protocol_id(self):
-		return types.Int(value=self.protocol_id).marshal()
+		return values.Int(value=self.protocol_id).marshal()
 
 	def _on_connect(self):
 		log.debug("Connected")
@@ -64,7 +64,7 @@ class BaseProtocol(object):
 		with self._lock:
 			for byte in data:
 				self._data.append(byte)
-				if byte == types.EndOfContent.tag:
+				if byte == values.EndOfContent.tag:
 					msgs.append(self._unmarshal_data())
 					self._data = bytearray()
 		for msg in msgs:
@@ -74,14 +74,13 @@ class BaseProtocol(object):
 		tag = self._data[0]
 		message_cls = self.message_tags.get(tag)
 		if message_cls is None:
-			error = types.MessageError(
+			error = values.MessageError(
 				failed_msg_typs=tag,
-				error_text="",#"invalid identifier",
+				error_text="unknown message identifier",
 			)
 			self.send(error)
 			return
 		message = message_cls.unmarshal(self._data)
-
 	
 	def on_message(self, msg):
 		"""Implement to handle incoming messages."""

@@ -135,9 +135,8 @@ class Complex(Base, metaclass=ComplexType):
 			setattr(self, k, v)
 
 	def _marshal_value(self):
-		marshalled = b""
 		marshalled_fields = [field.marshal() for field in self._fields.values()]
-		marshalled += b"".join(marshalled_fields)
+		marshalled = b"".join(marshalled_fields)
 		# TODO extensions?
 		marshalled += EndOfContent().marshal()
 		return marshalled
@@ -180,9 +179,21 @@ class Message(Complex):
 		return 4 + self.identifier
 
 
-class RegisteredExtension(Base):
+class RegisteredExtension(Complex):
 	tag = 12
-	# TODO implement
+
+	@property
+	def registered_id(self):
+		"""Implement to return the extension's registered ID."""
+		raise NotImplementedError
+
+	def _marshal_registered_id(self):
+		return struct.pack("!I", self.registered_id)
+
+	def _marshal_value(self):
+		id = self._marshal_registered_id()
+		fields = super(RegisteredExtension, self)._marshal_value()
+		return id + fields
 
 
 class Primitive(Base):
@@ -268,6 +279,11 @@ class String(Primitive):
 		return length + value
 
 
+class MessageError(RegisteredExtension):
+	registered_id = 8
+	failed_msg_typs = Int() # TODO The purpose of this field is unclear...
+	error_text = String()
+
 
 def unmarshal(data):
 	tag, value = data[0], data[1:]
@@ -279,15 +295,6 @@ def unmarshal(data):
 	if unmarshalled is None:
 		raise ValueError("No suitable marshalling class found.")
 	return unmarshalled
-
-
-class MessageError(Message):
-	# ID 8 is tag 12, but tag 12 is Registered Extension? Strange...
-	identifier = 8
-	# Don't raise because tag is greater than 7
-	tag = 4 + identifier
-	failed_msg_typs = Int() # TODO The purpose of this field is unclear...
-	error_text = String()
 
 
 all_types = [
