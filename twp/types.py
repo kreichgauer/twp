@@ -281,6 +281,15 @@ def unmarshal(data):
 	return unmarshalled
 
 
+class MessageError(Message):
+	# ID 8 is tag 12, but tag 12 is Registered Extension? Strange...
+	identifier = 8
+	# Don't raise because tag is greater than 7
+	tag = 4 + identifier
+	failed_msg_typs = Int() # TODO The purpose of this field is unclear...
+	error_text = String()
+
+
 all_types = [
 	EndOfContent,
 	NoValue,

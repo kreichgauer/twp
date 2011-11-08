@@ -1,3 +1,4 @@
+import threading
 from twp import log, types
 
 TWP_MAGIC = b"TWP3\n"
@@ -18,27 +19,30 @@ class BaseProtocol(object):
 	protocol_id = 2
 
 	def __init__(self, transport):
+		self._lock = threading.Lock()
+		self._data = bytearray()
 		self.transport = transport
 
 	def _send(self, data):
 		self.transport.send(data)
 
 	def send(self, msg):
-		self._send(msg.marshal())
+		data = msg.marshal()
+		self._send(data)
 
 	@property
-	def messages(self):
+	def message_tags(self):
 		"""Returns a dict mapping ids to subclasses of `Message`."""
-		if not hasattr(self, "_messages"):
-			self._messages = dict(
-				((msg.id, msg) for msg in self.message_types)
+		if not hasattr(self, "_message_tags"):
+			self._message_tags = dict(
+				((msg.tag, msg) for msg in self.message_types)
 			)
-		return self._messages
+		return self._message_tags
 
 	@property
 	def message_types(self):
-		"""Returns a list of supported types for the protocol."""
-		return types.builtin_types
+		"""Implement to return a list of supported types for the protocol."""
+		raise NotImplementedError
 
 	def _marshal_protocol_id(self):
 		return types.Int(value=self.protocol_id).marshal()
@@ -54,8 +58,33 @@ class BaseProtocol(object):
 		raise NotImplementedError
 	
 	def on_data(self, data):
-		"""Implement to handle incoming data."""
-		# TODO Implement message parsing here, based on data provided by child class
+		# Append messages to a list, so message handling won't happen while the 
+		# lock is held.
+		msgs = []
+		with self._lock:
+			for byte in data:
+				self._data.append(byte)
+				if byte == types.EndOfContent.tag:
+					msgs.append(self._unmarshal_data())
+					self._data = bytearray()
+		for msg in msgs:
+			self.on_message(msgs)
+
+	def _unmarshal_data(self):
+		tag = self._data[0]
+		message_cls = self.message_tags.get(tag)
+		if message_cls is None:
+			error = types.MessageError(
+				failed_msg_typs=tag,
+				error_text="",#"invalid identifier",
+			)
+			self.send(error)
+			return
+		message = message_cls.unmarshal(self._data)
+
+	
+	def on_message(self, msg):
+		"""Implement to handle incoming messages."""
 		raise NotImplementedError
 
 	def on_end(self):

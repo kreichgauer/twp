@@ -22,8 +22,8 @@ class Protocol(protocol.BaseProtocol):
 		ping = Request(text="Hello, World!")
 		self.send(ping)
 	
-	def on_data(self, data):
-		log.debug('Data received: %r' % data)
+	def on_message(self, msg):
+		log.debug('Message received: %s' % msg)
 
 	def on_end(self):
 		pass
