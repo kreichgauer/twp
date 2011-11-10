@@ -3,40 +3,46 @@ from lepl import *
 letter = Letter() | Literal("_")
 identifier = Word(letter, letter | Digit())
 number = Integer()
-colon = Literal(":")
-semicolon = Literal(";")
-lt = Literal("<")
-gt = Literal(">")
-lbr = Literal("{")
-rbr = Literal("}")
-eq = Literal("=")
+colon = Drop(":")
+semicolon = Drop(";")
+lt = Drop("<")
+gt = Drop(">")
+lbr = Drop("{")
+rbr = Drop("}")
+eq = Drop("=")
 id = Literal("ID")
 
-spaces = ~Space()[1:]
+spaces = Space()[1:]
+
+primitiveType = Or("int", "string", "binary", "any")
 
 with TraceVariables():
-	with SmartSeparator2(spaces):
-		primitiveType = Or("int", "string", "binary", "any")
+	with SmartSeparator2(~spaces):
 		anyDefinedBy = Literal("any") & "defined" & "by"
 		type = primitiveType | identifier | anyDefinedBy & identifier
+		idPair = id & number
 
-		# SmartSeparator1/2 leaves out the space between the optional literal
-		# and the remaining line here.
-		field = Optional(Literal("optional")) & type & identifier / ~semicolon
-		structdef = Literal("struct") & identifier & Optional(~eq / ~id & number) &\
-			~lbr & field[1:] & ~rbr
-		sequencedef = Literal("sequence") & ~lt & type & ~gt & identifier & ~semicolon
-		uniondef = Literal("union") & identifier
-		casedef = Literal("case") & number / ~colon / type & identifier / ~semicolon
-		forwarddef = Literal("typedef") & identifier / ~semicolon
-		typedef = structdef | sequencedef | uniondef | forwarddef
+		field = Optional("optional") & type & identifier
+		structdef = "struct" & identifier
+		uniondef = "union" & identifier
+		casedef = "case" & number
+		forwarddef = "typedef" & identifier
+		messagedef = "message" & identifier
+		
+		protocol = "protocol" & identifier
 
-		messagedef = Literal("message") & identifier / ~eq /\
-			(Regexp(r"[0-7]") | ~id & number) / ~lbr / field[:] / ~rbr
+	with DroppedSpace():
+		field &= semicolon
+		structdef &= Optional(eq & idPair) & lbr & field[1:] & rbr
+		sequencedef = "sequence" & lt & type & gt & identifier & semicolon
+		uniondef &= lbr & casedef[1:] & rbr
+		casedef &= colon & type & ~spaces & identifier & semicolon
+		forwarddef &= semicolon
+		messagedef &= eq & (Regexp(r"[0-7]") | idPair) & lbr & field[:] & rbr
+	
+	typedef = structdef | sequencedef | uniondef | forwarddef
+	protocolelement = typedef | messagedef
 
-		protocolelement = typedef | messagedef
-		protocol = Literal("protocol") & identifier / ~eq / ~id & number / ~lbr /\
-			protocolelement[:] / ~rbr
-
-		specification = (protocol | messagedef | structdef)[:]
-		#return specification
+	with DroppedSpace():
+		protocol &= eq & idPair & lbr & protocolelement[:] & rbr
+		specification = Or(protocol, messagedef, structdef)[:]
