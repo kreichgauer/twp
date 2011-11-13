@@ -2,6 +2,7 @@ import select
 import socket
 import threading
 from .protocol import BaseProtocol
+from .error import TWPError
 from . import log
 
 SELECT_TIMEOUT = 1

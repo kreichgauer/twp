@@ -21,8 +21,11 @@ class Base(object):
 	@classmethod
 	def unmarshal(self, tag, value):
 		"""Factory method that returns an initialized instance from a marshaled
-		byte representation."""
-		return self()
+		byte representation. Implement to return a pair of the parsed instance
+		and an int for the number of bytes of value processed. Raise a 
+		ValueError if value is incomplete. Raise a TWPError if value is invalid
+		and cannot be completed to a valid representation of this type."""
+		raise NotImplementedError
 
 	def is_optional(self):
 		return self._optional
@@ -54,10 +57,11 @@ class Base(object):
 			return self._marshal_no_value()
 		return self._marshal_tag() + self._marshal_value()
 
-	def handles_tag(self, tag):
+	@classmethod
+	def handles_tag(cls, tag):
 		"""Implement to return True iff the class should be used for 
 		unmarshalling a field with the given tag."""
-		return not tag is None and self.tag == tag
+		return not tag is None and cls.tag == tag
 
 
 class NoValueBase(Base):
@@ -237,9 +241,10 @@ class Int(Primitive):
 			except struct.error:
 				pass
 		raise ValueError("Integer value out of bounds")	
-			
-	def handles_tag(self, tag):
-		all_tags = [t for t, l, f in self._formats]
+		
+	@classmethod	
+	def handles_tag(cls, tag):
+		all_tags = [t for t, l, f in cls._formats]
 		return tag in all_tags
 
 
@@ -262,7 +267,8 @@ class String(Primitive):
 	def is_long_string(self):
 		return len(self.encoded_value()) > 109
 
-	def handles_tag(self, tag):
+	@classmethod
+	def handles_tag(cls, tag):
 		return tag in range(17,128)
 
 	def _marshal_value(self):

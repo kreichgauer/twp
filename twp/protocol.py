@@ -58,8 +58,8 @@ class BaseProtocol(object):
 		raise NotImplementedError
 	
 	def on_data(self, data):
-		# Append messages to a list, so message handling won't happen while the 
-		# lock is held.
+		# Append messages to a list, so messages are handled after the lock has 
+		# been released.
 		msgs = []
 		with self._lock:
 			for byte in data:
@@ -71,8 +71,13 @@ class BaseProtocol(object):
 			self.on_message(msgs)
 
 	def _unmarshal_data(self):
+		# TODO merge w/ values.unmarshal()?
 		tag = self._data[0]
-		message_cls = self.message_tags.get(tag)
+		message_cls = None
+		for msg in self.message_types:
+			if msg.handles_tag(tag):
+				# msg.tag is a property object...
+				message_cls = msg
 		if message_cls is None:
 			error = values.MessageError(
 				failed_msg_typs=tag,
