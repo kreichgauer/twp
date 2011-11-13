@@ -1,0 +1,2 @@
+class TWPError(Exception):
+	pass
