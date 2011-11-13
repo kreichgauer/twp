@@ -3,6 +3,7 @@
 import collections
 import copy
 import struct
+from .error import TWPError
 
 class Base(object):
 	# FIXME find a better class name
@@ -19,13 +20,19 @@ class Base(object):
 		raise NotImplementedError
 	
 	@classmethod
-	def unmarshal(self, tag, value):
+	def _unmarshal(cls, tag, value):
 		"""Factory method that returns an initialized instance from a marshaled
 		byte representation. Implement to return a pair of the parsed instance
 		and an int for the number of bytes of value processed. Raise a 
 		ValueError if value is incomplete. Raise a TWPError if value is invalid
 		and cannot be completed to a valid representation of this type."""
 		raise NotImplementedError
+
+	@classmethod
+	def unmarshal(cls, tag, value):
+		if not cls.handles_tag(tag):
+			raise TWPError("Invalid tag")
+		return cls._unmarshal(tag, value)
 
 	def is_optional(self):
 		return self._optional
@@ -44,7 +51,6 @@ class Base(object):
 		raise NotImplementedError
 
 	def _marshal_no_value(self):
-		"""Implement to return a byte string with the marshalled value."""
 		return NoValue().marshal()
 
 	def marshal(self):
@@ -70,11 +76,11 @@ class NoValueBase(Base):
 		return False
 
 	@classmethod
-	def unmarshal(self, tag, value):
+	def _unmarshal(cls, tag, value):
 		# FIXME ??? Allow None? Disallow ""?
 		if value not in (None, ""):
 			raise ValueError("No value expected.")
-		return self()
+		return cls(), 0
 
 	def _marshal_value(self):
 		return b""
@@ -130,6 +136,26 @@ class Complex(Base, metaclass=ComplexType):
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
+	@classmethod
+	def _unmarshal(cls, tag, value):
+		attrs = {}
+		total_length = 0
+		instance = cls()
+		# Marhal value field for field
+		for field in instance._fields.values():
+			if not len(value):
+				# Value too short, wait for more input
+				raise ValueError()
+			unmarshalled, length = field.unmarshal(value[0], value[1:])
+			if type(field) != type(unmarshalled):
+				raise TWPError("Invalid field in Complex value")
+			value = value[length:]
+			total_length += length
+			attrs[field.name] = unmarshalled.value
+		# FIXME this won't work ... what about e.g. struct in a message?
+		unmarshalled = cls(**attrs)
+		return unmarshalled, total_length
+
 	def update_fields(self, **kwargs):
 		# TODO input check
 		for k, v in kwargs.items():
@@ -181,6 +207,9 @@ class Message(Complex):
 		if self.identifier > 7:
 			raise ValueError("Message identifier cannot be greater than 7.")
 		return 4 + self.identifier
+
+
+class Union(Complex):
 
 
 class RegisteredExtension(Complex):
@@ -301,14 +330,3 @@ def unmarshal(data):
 	if unmarshalled is None:
 		raise ValueError("No suitable marshalling class found.")
 	return unmarshalled
-
-
-all_types = [
-	EndOfContent,
-	NoValue,
-	Struct,
-	Sequence,
-	RegisteredExtension,
-	Int,
-	String,
-]

@@ -60,6 +60,7 @@ class BaseProtocol(object):
 	def on_data(self, data):
 		# Append messages to a list, so messages are handled after the lock has 
 		# been released.
+		# FIXME change this. need to peek ahead.
 		msgs = []
 		with self._lock:
 			for byte in data:
