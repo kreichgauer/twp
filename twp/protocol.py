@@ -15,13 +15,17 @@ class Message(object):
 
 
 class BaseProtocol(object):
-
 	protocol_id = 2
 
 	def __init__(self, transport):
-		self._lock = threading.Lock()
-		self._data = bytearray()
 		self.transport = transport
+		# Lock for all data structures that handle *incoming* data
+		self._lock = threading.Lock()
+		# Incoming, unprocessed bytes
+		self._data = bytearray()
+		# Values, unmarshaled from incoming bytes, waiting to be composed into
+		# messages
+		self._values = []
 
 	def _send(self, data):
 		self.transport.send(data)
@@ -58,35 +62,56 @@ class BaseProtocol(object):
 		raise NotImplementedError
 	
 	def on_data(self, data):
-		# Append messages to a list, so messages are handled after the lock has 
-		# been released.
-		# FIXME change this. need to peek ahead.
-		msgs = []
 		with self._lock:
+			# TODO how far do we have to lock?
 			for byte in data:
 				self._data.append(byte)
-				if byte == values.EndOfContent.tag:
-					msgs.append(self._unmarshal_data())
-					self._data = bytearray()
-		for msg in msgs:
-			self.on_message(msgs)
+			# Unmarshal as many bytes from the data as possible, discard all
+			# processed bytes
+			for message in self._unmarshal_messages()
+				self.on_message(message)
 
-	def _unmarshal_data(self):
-		# TODO merge w/ values.unmarshal()?
-		tag = self._data[0]
-		message_cls = None
-		for msg in self.message_types:
-			if msg.handles_tag(tag):
-				# msg.tag is a property object...
-				message_cls = msg
-		if message_cls is None:
-			error = values.MessageError(
-				failed_msg_typs=tag,
-				error_text="unknown message identifier",
-			)
-			self.send(error)
-			return
-		message = message_cls.unmarshal(self._data)
+	def _unmarshal_messages(self):
+		# Unmarshal bytes. When an EndOfContent is found, compose popped values 
+		# and yield composed message. First of a sequence must be message-like,
+		# i.e. Message or RegisteredExtension
+		while len(self._data):
+			if len(self._values) == 0:
+				value, length = self._unmarshal_message()
+			else:
+				value, length = self._unmarshal_value()
+			self._values.append(value)
+			self._data = self._data[length:]
+			if isinstance(value, twp.values.EndOfContent):
+				message = self._compose_message(self._values)
+				self._values = []
+				yield message
+
+	def _unmarshal_message(self, data):
+		"""Unmarshals a single message-like value from the bytesequence data.
+		Returns the value and the number of bytes processed."""
+		pass
+
+	def _unmarshal_value(self, data):
+		"""Unmarshals a single field-like value from the bytesequence data. 
+		Returns the value and the number of bytes processed."""
+		pass
+
+	def _compose_message(self, values):
+		message = values[0]
+		message_values = values[1:]
+		# Paranoia sanity checks
+		if not (isinstance(message, twp.values.Message) or
+				isinstance(message, twp.values.RegisteredExtension)):
+			raise TWPError("Message-like value expected")
+		if not isinstance(message_values[-1], twp.values.EndOfContent):
+			raise TWPError("Last value must be EndOfContent")
+		try:
+			message = message.compose(message_values)
+		except TWPError:
+			# Invalid sequence of values for this message type
+			raise
+		return message
 	
 	def on_message(self, msg):
 		"""Implement to handle incoming messages."""
