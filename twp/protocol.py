@@ -119,6 +119,8 @@ class MessageBuilder(object):
 				break
 			self._did_process(length)
 			self._next_field()
+			# FIXME handle EndOfContent
+			# TODO handle extensions
 
 	def _did_process(self, length):
 		self.data = self.data[length:]

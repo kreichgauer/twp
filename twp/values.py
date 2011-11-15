@@ -19,20 +19,19 @@ class Base(object):
 		"""The types tag."""
 		raise NotImplementedError
 	
-	@classmethod
-	def _unmarshal(cls, tag, value):
-		"""Factory method that returns an initialized instance from a marshaled
-		byte representation. Implement to return a pair of the parsed instance
-		and an int for the number of bytes of value processed. Raise a 
-		ValueError if value is incomplete. Raise a TWPError if value is invalid
-		and cannot be completed to a valid representation of this type."""
+	def _unmarshal(self, tag, value):
 		raise NotImplementedError
 
-	@classmethod
-	def unmarshal(cls, tag, value):
-		if not cls.handles_tag(tag):
+	def unmarshal(self, data):
+		# FIXME handle NoValue
+		tag = data[0]
+		value = data[1:]
+		if not self._class__.handles_tag(tag):
 			raise TWPError("Invalid tag")
-		return cls._unmarshal(tag, value)
+		unmarshalled, length = self._unmarshal(tag, value)
+		self.value = unmarshalled
+		length += 1
+		return unmarshalled, length
 
 	def is_optional(self):
 		return self._optional
@@ -75,12 +74,8 @@ class NoValueBase(Base):
 	def is_empty(self):
 		return False
 
-	@classmethod
-	def _unmarshal(cls, tag, value):
-		# FIXME ??? Allow None? Disallow ""?
-		if value not in (None, ""):
-			raise ValueError("No value expected.")
-		return cls(), 0
+	def _unmarshal(self, tag, value):
+		return None, 0
 
 	def _marshal_value(self):
 		return b""
@@ -136,25 +131,19 @@ class Complex(Base, metaclass=ComplexType):
 	def __init__(self, **kwargs):
 		self.update_fields(**kwargs)
 
-	@classmethod
-	def _unmarshal(cls, tag, value):
+	def _unmarshal(self, tag, value):
 		attrs = {}
 		total_length = 0
-		instance = cls()
 		# Marhal value field for field
 		for field in instance._fields.values():
 			if not len(value):
 				# Value too short, wait for more input
 				raise ValueError()
-			unmarshalled, length = field.unmarshal(value[0], value[1:])
-			if type(field) != type(unmarshalled):
-				raise TWPError("Invalid field in Complex value")
+			unmarshalled, length = field.unmarshal(value)
 			value = value[length:]
 			total_length += length
-			attrs[field.name] = unmarshalled.value
-		# FIXME this won't work ... what about e.g. struct in a message?
-		unmarshalled = cls(**attrs)
-		return unmarshalled, total_length
+			attrs[field.name] = unmarshalled
+		return attrs, total_length
 
 	def update_fields(self, **kwargs):
 		# TODO input check
@@ -210,6 +199,8 @@ class Message(Complex):
 
 
 class Union(Complex):
+	# TODO implement
+	pass
 
 
 class RegisteredExtension(Complex):
@@ -240,29 +231,27 @@ class Primitive(Base):
 
 
 class Int(Primitive):
-	_formats = (
+	_formats = {
 		# tag, length, format
-		(13, 1, '>b'),
-		(14, 4, '>l'),
-	)
+		13: (1, '>b'),
+		14: (4, '>l'),
+	}
 
-	@classmethod
-	def _unpack_with_format(cls, format, value):
-		return cls(struct.unpack(format, value)[0])
+	def _unpack_with_format(self, format, value):
+		return struct.unpack(format, value)[0]
 
-	@classmethod
-	def unmarshal(cls, tag, value):
+	def _unmarshal(self, tag, value):
 		length = len(value)
-		for tag_, length_, format in cls._formats:
-			if tag == tag_ and length == length_:
-				return cls._unpack_with_format(format, value)
-		raise ValueError("Invalid tag length pair (%d, %d)" % tag, length)
+		struct_length, format = self._formats.get(format)
+		if length < struct_length:
+			raise ValueError("Invalid tag length pair (%d, %d)" % tag, length)
+		return self._unpack_with_format(format, value), struct_length
 
 	def _pack_with_format(self, format):
 		return struct.pack(format, self.value)
 
 	def marshal(self):
-		for tag, length, format in self._formats:
+		for tag, (length, format) in self._formats.items():
 			try:
 				value = self._pack_with_format(format)
 				tag = bytes([tag])
