@@ -67,7 +67,10 @@ class Transport(threading.Thread):
 	def run(self):
 		try:
 			while not self._should_stop():
-				data = self._socket.recv(SOCKET_READSIZE)
+				try:
+					data = self._socket.recv(SOCKET_READSIZE)
+				except socket.timeout:
+					continue
 				if not data:
 					log.warn("Remote side hung up")
 					break

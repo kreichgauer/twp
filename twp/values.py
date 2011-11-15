@@ -153,6 +153,9 @@ class Complex(Base, metaclass=ComplexType):
 				raise ValueError("No field named %s" % k)
 			setattr(self, k, v)
 
+	def get_fields(self):
+		return list(self._fields.values())
+
 	def _marshal_value(self):
 		marshalled_fields = [field.marshal() for field in self._fields.values()]
 		marshalled = b"".join(marshalled_fields)
@@ -197,6 +200,17 @@ class Message(Complex):
 		"""Implement to return True iff the class should be used for 
 		unmarshalling a field with the given tag."""
 		return tag == cls.identifier + 4
+
+	@property
+	def _eoc(self):
+		if not hasattr(self, '__eoc'):
+			self.__eoc = EndOfContent()
+		return self.__eoc
+
+	def get_fields(self):
+		fields = super(Message, self).get_fields()
+		fields.append(self._eoc)
+		return fields
 
 
 class Union(Complex):

@@ -117,7 +117,7 @@ class MessageBuilder(object):
 		if message is None:
 			raise TWPError("Unknown message tag %d" % tag)
 		self.message = message
-		self.field_iterator = iter(self.message._fields.values())
+		self.field_iterator = iter(self.message.get_fields())
 		self._did_process(1)
 
 	def _unmarshal_values(self):
