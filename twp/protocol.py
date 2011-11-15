@@ -21,11 +21,7 @@ class BaseProtocol(object):
 		self.transport = transport
 		# Lock for all data structures that handle *incoming* data
 		self._lock = threading.Lock()
-		# Incoming, unprocessed bytes
-		self._data = bytearray()
-		# Values, unmarshaled from incoming bytes, waiting to be composed into
-		# messages
-		self._values = []
+		self._builder = MessageBuilder()
 
 	def _send(self, data):
 		self.transport.send(data)
@@ -64,55 +60,12 @@ class BaseProtocol(object):
 	def on_data(self, data):
 		with self._lock:
 			# TODO how far do we have to lock?
-			for byte in data:
-				self._data.append(byte)
-			# Unmarshal as many bytes from the data as possible, discard all
-			# processed bytes
-			for message in self._unmarshal_messages()
-				self.on_message(message)
+			while len(data):
+				message, length = self._builder.build_message(data)
+				if message:
+					self.protocol.on_message(message)
+				data = data[length:]
 
-	def _unmarshal_messages(self):
-		# Unmarshal bytes. When an EndOfContent is found, compose popped values 
-		# and yield composed message. First of a sequence must be message-like,
-		# i.e. Message or RegisteredExtension
-		while len(self._data):
-			if len(self._values) == 0:
-				value, length = self._unmarshal_message()
-			else:
-				value, length = self._unmarshal_value()
-			self._values.append(value)
-			self._data = self._data[length:]
-			if isinstance(value, twp.values.EndOfContent):
-				message = self._compose_message(self._values)
-				self._values = []
-				yield message
-
-	def _unmarshal_message(self, data):
-		"""Unmarshals a single message-like value from the bytesequence data.
-		Returns the value and the number of bytes processed."""
-		pass
-
-	def _unmarshal_value(self, data):
-		"""Unmarshals a single field-like value from the bytesequence data. 
-		Returns the value and the number of bytes processed."""
-		pass
-
-	def _compose_message(self, values):
-		message = values[0]
-		message_values = values[1:]
-		# Paranoia sanity checks
-		if not (isinstance(message, twp.values.Message) or
-				isinstance(message, twp.values.RegisteredExtension)):
-			raise TWPError("Message-like value expected")
-		if not isinstance(message_values[-1], twp.values.EndOfContent):
-			raise TWPError("Last value must be EndOfContent")
-		try:
-			message = message.compose(message_values)
-		except TWPError:
-			# Invalid sequence of values for this message type
-			raise
-		return message
-	
 	def on_message(self, msg):
 		"""Implement to handle incoming messages."""
 		raise NotImplementedError
@@ -120,3 +73,62 @@ class BaseProtocol(object):
 	def on_end(self):
 		"""Implement to handle connection end."""
 		raise NotImplementedError
+
+
+class MessageBuilder(object):
+	def __init__(self):
+		self.reset()
+
+	def reset(self):
+		# Incoming data
+		self.data = b""
+		# Number of processed bytes
+		self.processed = 0
+		# Current message
+		self.message = None
+		# Iterator keeping track which field we're at
+		self.field_iterator = None
+		self.current_field = None
+
+	def build_message(self, data):
+		"""Returns a message or None, and the number of processed bytes."""
+		if not self.data:
+			self._unmarshal_message(data[0])
+			self._did_process(1)
+		self.data = data
+		self._unmarshal_values()
+		result = None, self.processed
+		if self._result_ready():
+			result = self.message, self.processed
+			self.reset()
+		return message, self.processed
+
+	def _unmarshal_message(self, tag):
+		# Get that message class from somewhere (protocol?)
+		#self.field_iterator = iter(self.message._fields.values())
+		pass
+
+	def _unmarshal_values(self):
+		if self.current_field is None:
+			self._next_field()
+		while not self.current_field is None:
+			try:
+				value, length = self.current_field.unmarshal(self.data)
+			except ValueError:
+				# We need more bytes
+				break
+			self._did_process(length)
+			self._next_field()
+
+	def _did_process(self, length):
+		self.data = self.data[length:]
+		self.processed += length
+
+	def _next_field():
+		try:
+			self.current_field = next(self.field_iterator)
+		except StopIteration:
+			self.current_field = None
+
+	def _result_ready():
+		return self.current_field is None
