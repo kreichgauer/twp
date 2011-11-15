@@ -21,7 +21,7 @@ class BaseProtocol(object):
 		self.transport = transport
 		# Lock for all data structures that handle *incoming* data
 		self._lock = threading.Lock()
-		self._builder = MessageBuilder()
+		self._builder = MessageBuilder(self)
 
 	def _send(self, data):
 		self.transport.send(data)
@@ -76,10 +76,12 @@ class BaseProtocol(object):
 
 
 class MessageBuilder(object):
-	def __init__(self):
+	def __init__(self, protocol):
+		self.protocol = protocol
 		self.reset()
 
 	def reset(self):
+		"""Called when build_message actually returns a message."""
 		# Incoming data
 		self.data = b""
 		# Number of processed bytes
@@ -91,11 +93,12 @@ class MessageBuilder(object):
 		self.current_field = None
 
 	def build_message(self, data):
-		"""Returns a message or None, and the number of processed bytes."""
-		if not self.data:
-			self._unmarshal_message(data[0])
+		"""Feed with bytes. Returns a message or None, and the number of 
+		processed bytes."""
+		if not self.message:
+			self._create_message(data[0])
 			self._did_process(1)
-		self.data = data
+		self.data += data
 		self._unmarshal_values()
 		result = None, self.processed
 		if self._result_ready():
@@ -103,10 +106,15 @@ class MessageBuilder(object):
 			self.reset()
 		return message, self.processed
 
-	def _unmarshal_message(self, tag):
-		# Get that message class from somewhere (protocol?)
-		#self.field_iterator = iter(self.message._fields.values())
-		pass
+	def _create_message(self, tag):
+		message = None
+		for message_type in self.message_types:
+			if message_type.handles_tag(tag):
+				message = message_type()
+		if message is None:
+			raise TWPError("Unknown message tag %d" % tag)
+		self.message = message
+		self.field_iterator = iter(self.message._fields.values())
 
 	def _unmarshal_values(self):
 		if self.current_field is None:
