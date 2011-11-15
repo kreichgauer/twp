@@ -272,6 +272,34 @@ class String(Primitive):
 	MAX_SHORT_LENGTH = 109
 	MAX_LENGTH = 2**32-1
 
+	def _unmarshal(self, tag, value):
+		if tag >= self.LONG_TAG:
+			return self._unmarshal_long(tag, value)
+		length = tag - self.SHORT_TAG
+		byte_length = len(value)
+		if byte_length < length:
+			raise ValueError("Value too short")
+		unmarshalled = value[:length]
+		try:
+			unmarshalled = unmarshalled.decode('utf-8')
+		except UnicodeDecodeError:
+			raise TWPError("Cannot decode string")
+		return unmarshalled, length
+
+	def _unmarshal_long(self, tag, value):
+		length = value[0:3]
+		value = [4:]
+		try:
+			length = struct.unpack("!I", length)
+		except struct.error:
+			raise TWPError("Cannot unpack length")
+		if len(value) < length:
+			raise ValueError("Value too short")
+		unmarshalled = value[:length]
+		unmarshalled = unmarshalled.decode('utf-8')
+		length += 4
+		return unmarshalled, length
+
 	def encoded_value(self):
 		return self.value.encode('utf-8')
 
