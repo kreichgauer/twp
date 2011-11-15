@@ -1,5 +1,6 @@
 import threading
 from twp import log, values
+from twp.error import TWPError
 
 TWP_MAGIC = b"TWP3\n"
 
@@ -59,11 +60,11 @@ class BaseProtocol(object):
 	
 	def on_data(self, data):
 		with self._lock:
-			# TODO how far do we have to lock?
+			log.debug("Recvd data: %s" % data)
 			while len(data):
 				message, length = self._builder.build_message(data)
 				if message:
-					self.protocol.on_message(message)
+					self.on_message(message)
 				data = data[length:]
 
 	def on_message(self, msg):
@@ -95,26 +96,29 @@ class MessageBuilder(object):
 	def build_message(self, data):
 		"""Feed with bytes. Returns a message or None, and the number of 
 		processed bytes."""
-		if not self.message:
-			self._create_message(data[0])
-			self._did_process(1)
+		# TODO Reset on TWPError?
 		self.data += data
+		if not self.message:
+			self._create_message()
 		self._unmarshal_values()
 		result = None, self.processed
 		if self._result_ready():
 			result = self.message, self.processed
 			self.reset()
-		return message, self.processed
+		return result
 
-	def _create_message(self, tag):
+	def _create_message(self):
+		tag = self.data[0]
 		message = None
-		for message_type in self.message_types:
+		for message_type in self.protocol.message_types:
 			if message_type.handles_tag(tag):
 				message = message_type()
+				break
 		if message is None:
 			raise TWPError("Unknown message tag %d" % tag)
 		self.message = message
 		self.field_iterator = iter(self.message._fields.values())
+		self._did_process(1)
 
 	def _unmarshal_values(self):
 		if self.current_field is None:
@@ -134,11 +138,11 @@ class MessageBuilder(object):
 		self.data = self.data[length:]
 		self.processed += length
 
-	def _next_field():
+	def _next_field(self):
 		try:
 			self.current_field = next(self.field_iterator)
 		except StopIteration:
 			self.current_field = None
 
-	def _result_ready():
+	def _result_ready(self):
 		return self.current_field is None

@@ -5,7 +5,7 @@ from .protocol import BaseProtocol
 from .error import TWPError
 from . import log
 
-SELECT_TIMEOUT = 1
+SOCKET_TIMEOUT = 1.0
 SOCKET_READSIZE = 1024
 
 class Transport(threading.Thread):
@@ -17,7 +17,6 @@ class Transport(threading.Thread):
 		super(Transport, self).__init__()
 		self._lock = threading.Lock()
 		self._stop_event = threading.Event()
-		self._send_buffer = b''
 		self._init_protocol()
 		self._init_socket(host, port, force_ip_v6)
 
@@ -31,6 +30,7 @@ class Transport(threading.Thread):
 		for af, socktype, proto, canonname, saddr in addrinfo:
 			try:
 				self._socket = socket.socket(af, socktype, proto)
+				self._socket.settimeout(SOCKET_TIMEOUT)
 			except socket.error as e:
 				self._socket = None
 				continue
@@ -47,9 +47,8 @@ class Transport(threading.Thread):
 	def send(self, msg):
 		"""Queue msg for transmission over the socket."""
 		msg = bytes(msg)
-		with self._lock:
-			self._send_buffer += msg # TODO encoding?
-			log.debug('Queued message: %r' % msg)
+		self._socket.sendall(msg) # TODO encoding?
+		log.debug('Sent message: %r' % msg)
 	
 	def start(self):
 		"""Start the recv cycle."""

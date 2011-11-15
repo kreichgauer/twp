@@ -26,8 +26,8 @@ class Base(object):
 		# FIXME handle NoValue
 		tag = data[0]
 		value = data[1:]
-		if not self._class__.handles_tag(tag):
-			raise TWPError("Invalid tag")
+		if not self.__class__.handles_tag(tag):
+			raise TWPError("Invalid tag %d" % tag)
 		unmarshalled, length = self._unmarshal(tag, value)
 		self.value = unmarshalled
 		length += 1
@@ -185,17 +185,18 @@ class Sequence(Complex):
 
 class Message(Complex):
 	@property
-	def identifier(self):
-		"""Set to the Message's identifier, which must be in range(0,7)."""
-		raise ValueError("Message without identifier.")
-
-	@property
 	def tag(self):
 		"""The Message's tag. This equals 4 plus the identifier. Raises a 
 		ValueError if the identifier is larger than 7."""
 		if self.identifier > 7:
 			raise ValueError("Message identifier cannot be greater than 7.")
-		return 4 + self.identifier
+		return self.identifier + 4
+
+	@classmethod
+	def handles_tag(cls, tag):
+		"""Implement to return True iff the class should be used for 
+		unmarshalling a field with the given tag."""
+		return tag == cls.identifier + 4
 
 
 class Union(Complex):
@@ -242,10 +243,12 @@ class Int(Primitive):
 
 	def _unmarshal(self, tag, value):
 		length = len(value)
-		struct_length, format = self._formats.get(format)
+		struct_length, format = self._formats[tag]
 		if length < struct_length:
 			raise ValueError("Invalid tag length pair (%d, %d)" % tag, length)
-		return self._unpack_with_format(format, value), struct_length
+		unmarshalled = value[:struct_length]
+		unmarshalled = self._unpack_with_format(format, unmarshalled)
+		return unmarshalled, struct_length
 
 	def _pack_with_format(self, format):
 		return struct.pack(format, self.value)
@@ -262,7 +265,7 @@ class Int(Primitive):
 		
 	@classmethod	
 	def handles_tag(cls, tag):
-		all_tags = [t for t, l, f in cls._formats]
+		all_tags = [t for t, (l, f) in cls._formats.items()]
 		return tag in all_tags
 
 
@@ -288,7 +291,7 @@ class String(Primitive):
 
 	def _unmarshal_long(self, tag, value):
 		length = value[0:3]
-		value = [4:]
+		value = value[4:]
 		try:
 			length = struct.unpack("!I", length)
 		except struct.error:
@@ -335,15 +338,3 @@ class MessageError(RegisteredExtension):
 	registered_id = 8
 	failed_msg_typs = Int() # TODO The purpose of this field is unclear...
 	error_text = String()
-
-
-def unmarshal(data):
-	tag, value = data[0], data[1:]
-	unmarshalled = None
-	for cls in all_types:
-		if cls.handles_tag(tag):
-			unmarshalled = cls.unmarshal(tag, value)
-			break
-	if unmarshalled is None:
-		raise ValueError("No suitable marshalling class found.")
-	return unmarshalled
