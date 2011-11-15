@@ -6,7 +6,7 @@ from .error import TWPError
 from . import log
 
 SELECT_TIMEOUT = 1
-SOCKET_BUFSIZE = 1024
+SOCKET_READSIZE = 1024
 
 class Transport(threading.Thread):
 	"""A TWP3 session."""
@@ -52,13 +52,13 @@ class Transport(threading.Thread):
 			log.debug('Queued message: %r' % msg)
 	
 	def start(self):
-		"""Start the send/recv cycle."""
+		"""Start the recv cycle."""
 		# Consider auto-starting
 		super(Transport, self).start()
 		self.protocol._on_connect()
 
 	def stop(self):
-		"""Tell the thread to stop its send/recv cycle. Ultimately close the 
+		"""Tell the thread to stop its recv cycle. Ultimately close the 
 		socket and stop the thread."""
 		self._stop_event.set()
 
@@ -66,23 +66,12 @@ class Transport(threading.Thread):
 		return self._stop_event.is_set()
 
 	def run(self):
-		# TODO Use a thread pool instead of one thread per Transport
 		try:
 			while not self._should_stop():
-				rlist = xlist = [self._socket]
-				wlist = rlist if len(self._send_buffer) else []
-				rlist, wlist, xlist = select.select(rlist, wlist, xlist, 
-					SELECT_TIMEOUT)
-				for socket in rlist:
-					data = self._socket.recv(SOCKET_BUFSIZE)
-					log.debug("Recv'd data over socket: %r" % data)
-					self.protocol.on_data(data)
-				for socket in wlist:
-					with self._lock:
-						self._socket.sendall(self._send_buffer)
-						log.debug("Sent data over socket: %r" % self._send_buffer)
-						self._send_buffer = b''
-				for socket in xlist:
-					log.warn('exception state on socket')
+				data = self._socket.recv(SOCKET_READSIZE)
+				if not data:
+					log.warn("Remote side hung up")
+					break
+				self.protocol.on_data(data)
 		finally:
 			self._socket.close()
