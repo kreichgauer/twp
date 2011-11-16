@@ -109,7 +109,7 @@ class ComplexType(type):
 						% (cls.__name__, k))
 				cls._fields[k] = v
 				v.name = v.name or k
-				setattr(cls, k, None)
+				delattr(cls, k)
 		return cls
 
 	def bases_have_attr(bases, attr):
@@ -173,7 +173,14 @@ class Complex(Base, metaclass=ComplexType):
 		field = self._fields.get(k)
 		if not field is None:
 			field.value = v
-		super(Complex, self).__setattr__(k, v)
+		else:
+			super(Complex, self).__setattr__(k, v)
+	
+	def __getattr__(self, k):
+		field = self._fields.get(k)
+		if field is None:
+			raise AttributeError
+		return field.value
 
 
 class Struct(Complex):
@@ -313,7 +320,10 @@ class String(Primitive):
 		if len(value) < length:
 			raise ValueError("Value too short")
 		unmarshalled = value[:length]
-		unmarshalled = unmarshalled.decode('utf-8')
+		try:
+			unmarshalled = unmarshalled.decode('utf-8')
+		except UnicodeDecodeError:
+			raise TWPError("Cannot decode string")
 		length += 4
 		return unmarshalled, length
 

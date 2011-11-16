@@ -24,6 +24,8 @@ class Protocol(protocol.BaseProtocol):
 	
 	def on_message(self, msg):
 		log.debug('Message received: %s' % msg)
+		#new_msg = Request(text=msg.text + "...again")
+		#self.send(new_msg)
 
 	def on_end(self):
 		pass

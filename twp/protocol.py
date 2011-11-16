@@ -103,6 +103,7 @@ class MessageBuilder(object):
 		self._unmarshal_values()
 		result = None, self.processed
 		if self._result_ready():
+			# FIXME check if message is valid, i.e. no empty non-optional fields
 			result = self.message, self.processed
 			self.reset()
 		return result
@@ -131,7 +132,6 @@ class MessageBuilder(object):
 				break
 			self._did_process(length)
 			self._next_field()
-			# FIXME handle EndOfContent
 			# TODO handle extensions
 
 	def _did_process(self, length):
