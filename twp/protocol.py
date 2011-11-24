@@ -92,6 +92,7 @@ class TWPClient(object):
 		return messages
 
 
+# TODO Use a pattern for this.
 class MessageBuilder(object):
 	def __init__(self, protocol):
 		self.protocol = protocol
