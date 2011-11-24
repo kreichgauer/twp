@@ -12,37 +12,28 @@ rbr = Drop("}")
 eq = Drop("=")
 id = Literal("ID")
 
-spaces = Space()[1:]
+space = Literal("[ \t\r\n]")
 
 primitiveType = Or("int", "string", "binary", "any")
 
 with TraceVariables():
-	with SmartSeparator2(~spaces):
+	with Separator(~Whitespace()[1:]):
 		anyDefinedBy = Literal("any") & "defined" & "by"
+		#idPair = 
+
+	with Separator(~Whitespace()[:]):
 		type = primitiveType | identifier | anyDefinedBy & identifier
-		idPair = id & number
 
-		field = Optional("optional") & type & identifier
-		structdef = "struct" & identifier
-		uniondef = "union" & identifier
-		casedef = "case" & number
-		forwarddef = "typedef" & identifier
-		messagedef = "message" & identifier
-		
-		protocol = "protocol" & identifier
-
-	with DroppedSpace():
-		field &= semicolon
-		structdef &= Optional(eq & idPair) & lbr & field[1:] & rbr
+		field = Optional("optional") & type & identifier & semicolon
+		structdef = "struct" & identifier & Optional(eq & idPair) & lbr & field[1:] & rbr
 		sequencedef = "sequence" & lt & type & gt & identifier & semicolon
-		uniondef &= lbr & casedef[1:] & rbr
-		casedef &= colon & type & ~spaces & identifier & semicolon
-		forwarddef &= semicolon
-		messagedef &= eq & (Regexp(r"[0-7]") | idPair) & lbr & field[:] & rbr
-	
-	typedef = structdef | sequencedef | uniondef | forwarddef
-	protocolelement = typedef | messagedef
+		casedef = "case" & number & colon & type & identifier & semicolon
+		uniondef = "union" & identifier & lbr & casedef[1:] & rbr
+		forwarddef = "typedef" & identifier & semicolon
+		messagedef = "message" & identifier & eq & (Regexp(r"[0-7]") | idPair) & lbr & field[:] & rbr
 
-	with DroppedSpace():
-		protocol &= eq & idPair & lbr & protocolelement[:] & rbr
+		typedef = structdef | sequencedef | uniondef | forwarddef
+		protocolelement = typedef | messagedef > List
+
+		protocol =  "protocol" & identifier & eq & ~id & number & lbr & protocolelement[:] & rbr >> 'protocol'
 		specification = Or(protocol, messagedef, structdef)[:]
