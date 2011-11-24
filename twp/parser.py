@@ -32,9 +32,12 @@ id = Literal("ID")
 primitiveType = Or("int", "string", "binary", "any")
 
 with TraceVariables():
-	with Separator(~Whitespace()[:]):
+	with Separator(~Whitespace()[1:]):
 		anyDefinedBy = Literal("any") & "defined" & "by"
-		type = Or(primitiveType, identifier, anyDefinedBy & identifier > "anyDefinedBy")
+		anyDefinedByType = anyDefinedBy & identifier > "anyDefinedBy"
+
+	with Separator(~Whitespace()[:]):
+		type = Or(primitiveType, identifier, anyDefinedByType)
 		idPair = id & number
 
 		field = Optional("optional") & (type > "type") & identifier & semicolon > Field
