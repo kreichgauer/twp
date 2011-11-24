@@ -1,7 +1,24 @@
 from lepl import *
 
+class Protocol(Node): pass
+class MessageDef(Node): pass
+class StructDef(Node): pass
+
+class ProtocolElement(Node): pass
+class TypeDef(ProtocolElement): pass
+class MessageDef(ProtocolElement): pass
+
+class StructDef(TypeDef): pass
+class SequenceDef(TypeDef): pass
+class UnionDef(TypeDef): pass
+class ForwardDef(TypeDef): pass
+
+class Field(Node): pass
+class Type(Node): pass
+
+
 letter = Letter() | Literal("_")
-identifier = Word(letter, letter | Digit())
+identifier = Word(letter, letter | Digit()) > "identifier"
 number = Integer()
 colon = Drop(":")
 semicolon = Drop(";")
@@ -12,28 +29,24 @@ rbr = Drop("}")
 eq = Drop("=")
 id = Literal("ID")
 
-space = Literal("[ \t\r\n]")
-
 primitiveType = Or("int", "string", "binary", "any")
 
 with TraceVariables():
-	with Separator(~Whitespace()[1:]):
-		anyDefinedBy = Literal("any") & "defined" & "by"
-
 	with Separator(~Whitespace()[:]):
-		type = primitiveType | identifier | anyDefinedBy & identifier
+		anyDefinedBy = Literal("any") & "defined" & "by"
+		type = Or(primitiveType, identifier, anyDefinedBy & identifier > "anyDefinedBy")
 		idPair = id & number
 
-		field = Optional("optional") & type & identifier & semicolon
+		field = Optional("optional") & (type > "type") & identifier & semicolon > Field
 		structdef = "struct" & identifier & Optional(eq & idPair) & lbr & field[1:] & rbr
 		sequencedef = "sequence" & lt & type & gt & identifier & semicolon
 		casedef = "case" & number & colon & type & identifier & semicolon
 		uniondef = "union" & identifier & lbr & casedef[1:] & rbr
 		forwarddef = "typedef" & identifier & semicolon
-		messagedef = "message" & identifier & eq & (Regexp(r"[0-7]") | idPair) & lbr & field[:] & rbr
+		messagedef = "message" & identifier & eq & Or(Regexp(r"[0-7]") > "id", idPair > "extensionId") & lbr & field[:] & rbr > MessageDef
 
-		typedef = structdef | sequencedef | uniondef | forwarddef
-		protocolelement = typedef | messagedef > List
+		typedef = Or(structdef, sequencedef, uniondef, forwarddef) > TypeDef
+		protocolelement = typedef | messagedef
 
-		protocol =  "protocol" & identifier & eq & ~id & number & lbr & protocolelement[:] & rbr >> 'protocol'
+		protocol =  Drop("protocol") & identifier & eq & ~id & (number > "id") & lbr & protocolelement[:] & rbr > Protocol
 		specification = Or(protocol, messagedef, structdef)[:]
