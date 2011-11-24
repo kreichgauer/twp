@@ -1,4 +1,5 @@
-from .. import log, protocol, values, transport
+import sys
+from twp import log, protocol, values
 
 class Request(values.Message):
 	identifier = 0
@@ -11,25 +12,20 @@ class Response(values.Message):
 	number_of_letters = values.Int()
 
 
-class Protocol(protocol.BaseProtocol):
+class EchoClient(protocol.TWPClient):
 	protocol_id = 2
 	message_types = [
 		Request,
 		Response,
 	]
 
-	def on_connect(self):
+	def echo(self, text):
 		ping = Request(text="Hello, World!")
-		self.send(ping)
-	
-	def on_message(self, msg):
-		log.debug('Message received: %s' % msg)
-		#new_msg = Request(text=msg.text + "...again")
-		#self.send(new_msg)
+		self.send_message(ping)
+		messages = self.recv_messages()
+		log.debug(messages)
 
-	def on_end(self):
-		pass
-
-
-class Transport(transport.Transport):
-	protocol_class = Protocol
+if __name__ == "__main__":
+	client = EchoClient()
+	text = sys.argv[1]
+	client.echo(text)

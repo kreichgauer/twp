@@ -1,24 +1,14 @@
-import threading
+import socket
 from twp import log, values
 from twp.error import TWPError
 
+SOCKET_READSIZE = 1024
 TWP_MAGIC = b"TWP3\n"
-
-class Field(object):
-	type = None
-	name = None
-	value = None
-
-
-class Message(object):
-	id = None
-	fields = None
-
 
 class TWPClient(object):
 	protocol_id = 2
 
-	def __init__(self, host, port, force_ip_v6=False):
+	def __init__(self, host='www.dcl.hpi.uni-potsdam.de', port=80, force_ip_v6=False):
 		self._builder = MessageBuilder(self)
 		self._init_socket(host, port, force_ip_v6=False)
 		self._init_session()
@@ -30,7 +20,6 @@ class TWPClient(object):
 		for af, socktype, proto, canonname, saddr in addrinfo:
 			try:
 				self.socket = socket.socket(af, socktype, proto)
-				self.socket.settimeout(SOCKET_TIMEOUT)
 			except socket.error as e:
 				self.socket = None
 				continue
@@ -72,25 +61,35 @@ class TWPClient(object):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
 
-	def recv_message(self):
-		data = self.socket.recv(SOCKET_READSIZE)
-		if not data:
-			log.warn("Remote side hung up")
-			# FIXME raise
-		log.debug("Recvd data: %s" % data)
-		while len(data):
-			message, length = self._builder.build_message(data)
-			if message:
-				self.on_message(message)
-			data = data[length:]
-
-	def on_message(self, msg):
-		"""Implement to handle incoming messages."""
-		raise NotImplementedError
-
-	def on_end(self):
-		"""Implement to handle connection end."""
-		raise NotImplementedError
+	def recv_messages(self):
+		"""Recv messages until all available data can be parsed into messages
+		or a timeout occurs. Return the list of parsed messages."""
+		# TODO maybe make this a generator for concurrency.
+		messages = []
+		while True:
+			# Recv data
+			try:
+				data = self.socket.recv(SOCKET_READSIZE)
+			except socket.timeout:
+				log.debug("socket timeout")
+				break
+			if not data:
+				log.warn("Remote side hung up")
+				# FIXME raise
+			log.debug("Recvd data: %s" % data)
+			# Pass data to message builder.
+			while len(data):
+				message, length = self._builder.build_message(data)
+				if message:
+					messages.append(message)
+				data = data[length:]
+			# TODO this looks a bit ugly
+			if not message:
+				# Last data chunk was a partial message, continue recv'ign
+				continue
+			else:
+				break
+		return messages
 
 
 class MessageBuilder(object):
