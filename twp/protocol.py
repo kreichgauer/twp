@@ -15,19 +15,46 @@ class Message(object):
 	fields = None
 
 
-class BaseProtocol(object):
+class TWPClient(object):
 	protocol_id = 2
 
-	def __init__(self, transport):
-		self.transport = transport
-		# Lock for all data structures that handle *incoming* data
-		self._lock = threading.Lock()
+	def __init__(self, host, port, force_ip_v6=False):
 		self._builder = MessageBuilder(self)
+		self._init_socket(host, port, force_ip_v6=False)
+		self._init_session()
+
+	def _init_socket(self, host, port, force_ip_v6=False):
+		socktype = socket.SOCK_STREAM
+		af = socket.AF_INET6 if force_ip_v6 else socket.AF_UNSPEC
+		addrinfo = socket.getaddrinfo(host, port, af, socktype)
+		for af, socktype, proto, canonname, saddr in addrinfo:
+			try:
+				self.socket = socket.socket(af, socktype, proto)
+				self.socket.settimeout(SOCKET_TIMEOUT)
+			except socket.error as e:
+				self.socket = None
+				continue
+			try:
+				self.socket.connect(saddr)
+			except socket.error as e:
+				self.socket.close()
+				self.socket = None
+				continue
+			break
+		if self.socket is None:
+			raise ValueError("Invalid address")
+
+	def _init_session(self):
+		self._send(TWP_MAGIC)
+		protocol_id = values.Int(value=self.protocol_id)
+		self.send_message(protocol_id)
 
 	def _send(self, data):
-		self.transport.send(data)
+		data = bytes(data)
+		self.socket.sendall(data)
+		log.debug('Sent data: %r' % data)
 
-	def send(self, msg):
+	def send_message(self, msg):
 		data = msg.marshal()
 		self._send(data)
 
@@ -45,27 +72,17 @@ class BaseProtocol(object):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
 
-	def _marshal_protocol_id(self):
-		return values.Int(value=self.protocol_id).marshal()
-
-	def _on_connect(self):
-		log.debug("Connected")
-		self._send(TWP_MAGIC)
-		self._send(self._marshal_protocol_id())
-		self.on_connect()
-
-	def on_connect(self):
-		"""Implement to handle the connection event."""
-		raise NotImplementedError
-	
-	def on_data(self, data):
-		with self._lock:
-			log.debug("Recvd data: %s" % data)
-			while len(data):
-				message, length = self._builder.build_message(data)
-				if message:
-					self.on_message(message)
-				data = data[length:]
+	def recv_message(self):
+		data = self.socket.recv(SOCKET_READSIZE)
+		if not data:
+			log.warn("Remote side hung up")
+			# FIXME raise
+		log.debug("Recvd data: %s" % data)
+		while len(data):
+			message, length = self._builder.build_message(data)
+			if message:
+				self.on_message(message)
+			data = data[length:]
 
 	def on_message(self, msg):
 		"""Implement to handle incoming messages."""
