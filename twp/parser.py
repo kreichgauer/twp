@@ -19,10 +19,10 @@ primitiveType = Or("int", "string", "binary", "any")
 with TraceVariables():
 	with Separator(~Whitespace()[1:]):
 		anyDefinedBy = Literal("any") & "defined" & "by"
-		#idPair = 
 
 	with Separator(~Whitespace()[:]):
 		type = primitiveType | identifier | anyDefinedBy & identifier
+		idPair = id & number
 
 		field = Optional("optional") & type & identifier & semicolon
 		structdef = "struct" & identifier & Optional(eq & idPair) & lbr & field[1:] & rbr
