@@ -14,8 +14,6 @@ class UnionDef(TypeDef): pass
 class ForwardDef(TypeDef): pass
 
 class Field(Node): pass
-class Type(Node): pass
-
 
 letter = Letter() | Literal("_")
 identifier = Word(letter, letter | Digit()) > "identifier"
@@ -33,14 +31,14 @@ primitiveType = Or("int", "string", "binary", "any")
 
 with TraceVariables():
 	with Separator(~Whitespace()[1:]):
-		anyDefinedBy = Literal("any") & "defined" & "by"
-		anyDefinedByType = anyDefinedBy & identifier > "anyDefinedBy"
+		anyDefinedBy = Add(Literal("any") & "defined" & "by")
+		anyDefinedByType = anyDefinedBy & identifier
 
 	with Separator(~Whitespace()[:]):
 		type = Or(primitiveType, identifier, anyDefinedByType)
 		idPair = id & number
 
-		field = Optional("optional") & (type > "type") & identifier & semicolon > Field
+		field = Optional("optional") & type & identifier & semicolon > Field
 		structdef = "struct" & identifier & Optional(eq & idPair) & lbr & field[1:] & rbr
 		sequencedef = "sequence" & lt & type & gt & identifier & semicolon
 		casedef = "case" & number & colon & type & identifier & semicolon
