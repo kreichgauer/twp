@@ -176,8 +176,10 @@ if __name__ == '__main__':
 	else:
 		print("Usage: twp-parser <input> [<output>]")
 		exit(1)
-	input = sys.argv[1]
-	with open(input) as input, open(output, 'w') as output:
+	try:
+		input = open(sys.argv[1])
+		if isinstance(output, str):
+			output = open(output, "w")
 		log.debug("Reading input file...")
 		idl = input.read()
 		log.debug("Parsing input...")
@@ -185,3 +187,7 @@ if __name__ == '__main__':
 		log.debug("Generating stub...")
 		gen = StubGenerator(ast, output)
 		gen.generate()
+	finally:
+		input.close()
+		if output != sys.stdout:
+			output.close()
