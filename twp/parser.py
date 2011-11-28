@@ -30,7 +30,7 @@ rbr = Drop("}")
 eq = Drop("=")
 id = Literal("ID")
 
-primitiveType = Or("int", "string", "binary", "any")
+primitiveType = Or("int", "string", "binary", "any") > "primitive"
 
 with TraceVariables():
 	with Separator(~Whitespace()[1:]):
@@ -38,7 +38,7 @@ with TraceVariables():
 		anyDefinedByType = anyDefinedBy & identifier
 
 	with Separator(~Whitespace()[:]):
-		type = Or(primitiveType, identifier, anyDefinedByType)
+		type = Or(primitiveType, identifier, anyDefinedByType) > "type"
 		idPair = ~id & number > "extension_id"
 
 		field = Optional("optional") & type & identifier & semicolon > Field
@@ -142,30 +142,60 @@ class StubGenerator(object):
 	def generate_field(self, node):
 		optional = node[0] == "optional"
 		optional_str = "optional=True" if optional else ""
-		name = node.identifier[-1]
+		type = node.type[0]
+		name = node.identifier[0]
 		field = None
-		if node[0] == "anydefinedby" or optional and node[1] == "anydefinedby":
-			field = 'twp.values.AnyDefinedBy("%s"' % (node.identifier[0])
+		if type[0] == "anydefinedby":
+			field = 'twp.values.AnyDefinedBy("%s"' % (type[1])
 			if optional:
 				field += ", " + optional_str
 			field += ")"
-		elif len(node.identifier) == 2:
-			# FIXME implement lookup
-			raise ValueError("typerefs not yet supported")
-		else:
+		elif type[0] == "identifier":
+			field = "%s()" % cap_and_camelcase(type[1])
+		else: #type[0] == "primitive"
 			# Primitiive
-			type = node[0] if not optional else node[1]
-			field = "twp.values.%s(%s)" % (type.capitalize(), optional_str)
+			field = "twp.values.%s(%s)" % (type[1].capitalize(), optional_str)
 		self.writeln('%s = %s' % (name, field))
 
 	def generate_structdef(self, node):
-		self.start_class(node.identifier[0], "twp.values.Struct")
+		name = cap_and_camelcase(node.identifier[0])
+		self.start_class(name, "twp.values.Struct")
 		self.indent()
 		if hasattr(node, "extension_id"):
 			self.writeln("extension_id = %s" % node.extension_id[0])
 		for field in node.Field:
 			self.generate_field(field)
 		self.dedent()
+
+	def generate_sequencedef(self, node):
+		name = cap_and_camelcase(node.identifier[0])
+		self.start_class(name, "twp.values.Sequence")
+		self.indent()
+		type = node.type[0] # (<specification>, <name>)
+		if type[0] == "primitive":
+			type = "twp.values.%s()" % type[1].capitalize()
+		elif type[0] == "identifier":
+			type = "%s()" % cap_and_camelcase(type[1])
+		else: #type[0] == "anydefinedby"
+			type = "twp.values.AnyDefinedBy(%s)" % type[1]
+		self.writeln("type = %s" % type)
+		self.dedent()
+
+	def generate_forwarddef(self, node):
+		# TODO implement
+		print("ForwardDef:\n%s" % node)
+
+
+def cap_and_camelcase(value):
+	# see http://stackoverflow.com/questions/4303492/how-can-i-simplify-this-conversion-from-underscore-to-camelcase-in-python
+    def camelcase(): 
+        yield str
+        while True:
+            yield str.capitalize
+
+    value = value.capitalize()
+    c = camelcase()
+    return "".join(next(c)(x) if x else '_' for x in value.split("_"))
 
 
 if __name__ == '__main__':
