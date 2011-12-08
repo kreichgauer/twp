@@ -2,12 +2,12 @@ import sys
 from twp import log, protocol, values
 
 class Request(values.Message):
-	identifier = 0
+	id = 0
 	text = values.String()
 
 
 class Response(values.Message):
-	identifier = 1
+	id = 1
 	text = values.String()
 	number_of_letters = values.Int()
 
