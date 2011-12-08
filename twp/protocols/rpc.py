@@ -23,7 +23,7 @@ class RPCException(twp.values.Struct):
     extension_id = 3
     text = twp.values.String()
 
-class RPC(twp.protocol.TWPClient):
+class RPCClient(twp.protocol.TWPClient):
     protocol_id = 1
     message_types = [
         Request,
@@ -31,3 +31,21 @@ class RPC(twp.protocol.TWPClient):
         CancelRequest,
         CloseConnection,
     ]
+
+    def __init__(self):
+    	self.request_id = 0
+
+    def request(self, operation, parameters=None, response_expected=True):
+    	parameters = self.build_parameters(parameters)
+    	request = Request(request_id, response_expected, operation, parameters)
+    	self.send(req)
+    	reply = None
+    	if response_expected:
+    		reply = self.recv_messages()[0]
+    		if not isinstance(msg, Reply):
+    			raise TWPError("Reply expected")
+    	return reply
+
+
+    def build_parameters(self, values):
+    	pass
