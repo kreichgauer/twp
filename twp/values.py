@@ -179,13 +179,30 @@ class Complex(Base, metaclass=ComplexType):
 	def __getattr__(self, k):
 		field = self._fields.get(k)
 		if field is None:
-			raise AttributeError
+			raise AttributeError()
 		return field.value
 
 
 class Struct(Complex):
 	tag = 2
-	# TODO implement
+
+	@staticmethod
+	def with_fields(**kwargs):
+		"""Returns an instance of Struct with the fields given in kwargs."""
+		# This is needed, because Structs can sometimes occur without having a 
+		# template class that defines all the fields. Maybe Message this is 
+		# needed for Message as well.
+		struct = Struct()
+		for name, field in kwargs.items():
+			struct._add_field(name, field)
+		return struct
+
+	def _add_field(self, name, field):
+		if name in self._fields:
+			raise ValueError("Struct already contains a field with this name")
+		self._fields[name] = field
+		field.name = field.name or name
+
 
 
 class Sequence(Complex):
