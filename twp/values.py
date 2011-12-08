@@ -67,7 +67,7 @@ class Base(object):
 		optional, a ValueError is raised else."""
 		if self.is_empty():
 			if not self.is_optional():
-				raise ValueError("Non-optional empty field.")
+				raise ValueError("Non-optional empty field %s." % self.name)
 			return self._marshal_no_value()
 		return self._marshal_tag() + self._marshal_value()
 
@@ -129,7 +129,7 @@ class ComplexType(type):
 
 
 class Complex(Base, metaclass=ComplexType):
-	def __new__(cls, **kwargs):
+	def __new__(cls, *args, **kwargs):
 		instance = super(Complex, cls).__new__(cls)
 		# Copy all the fields to be per instance, even if defined per class
 		# This is a strange way of achieving this. Better have types.Foo() 
@@ -137,14 +137,16 @@ class Complex(Base, metaclass=ComplexType):
 		instance._fields = copy.deepcopy(cls._fields)
 		return instance
 
-	def __init__(self, **kwargs):
-		self.update_fields(**kwargs)
+	def __init__(self, *args, optional=False, name=None, **kwargs):
+		super(Complex, self).__init__(optional=optional, name=name)
+		self._update_fields_positional(*args)
+		self._update_fields_by_name(**kwargs)
 
 	def _unmarshal(self, tag, value):
 		attrs = {}
 		total_length = 0
 		# Marhal value field for field
-		for field in instance._fields.values():
+		for field in self._fields.values():
 			if not len(value):
 				# Value too short, wait for more input
 				raise ValueError()
@@ -154,8 +156,13 @@ class Complex(Base, metaclass=ComplexType):
 			attrs[field.name] = unmarshalled
 		return attrs, total_length
 
-	def update_fields(self, **kwargs):
-		# TODO input check
+	def _update_fields_positional(self, *args):
+		if len(args) > len(self._fields):
+			raise ValueError("Too many arguments")
+		for (name, field), value in zip(self._fields.items(), args):
+			setattr(self, name, value)
+
+	def _update_fields_by_name(self, **kwargs):
 		for k, v in kwargs.items():
 			is_field = isinstance(self._fields.get(k), Base)
 			if not is_field:
@@ -174,9 +181,9 @@ class Complex(Base, metaclass=ComplexType):
 
 	def is_empty(self):
 		for name, field in self._fields.items():
-			if not field.is_optional() and not field.is_empty():
-				return False
-		return True
+			if not field.is_optional() and field.is_empty():
+				return True
+		return False
 
 	def __setattr__(self, k, v):
 		field = self._fields.get(k)
@@ -217,22 +224,26 @@ class Struct(Complex):
 class Sequence(Complex):
 	tag = 3
 	# TODO implement
+	# Possible implementation strategy: Change Complex._fields into list. Would
+	# probably need a dict of (target, field) for setattr on Message and Struct.
 register_value_type(Sequence)
 
 class Message(Complex):
 	@property
 	def tag(self):
-		"""The Message's tag. This equals 4 plus the identifier. Raises a 
-		ValueError if the identifier is larger than 7."""
-		if self.identifier > 7:
-			raise ValueError("Message identifier cannot be greater than 7.")
-		return self.identifier + 4
+		"""The Message's tag. This equals 4 plus the id. Raises a 
+		ValueError if the id is larger than 7."""
+		if not hasattr(self, 'id'):
+			raise ValueError("Message must have an id attribute.")
+		if self.id > 7:
+			raise ValueError("Message id cannot be greater than 7.")
+		return self.id + 4
 
 	@classmethod
 	def handles_tag(cls, tag):
 		"""Implement to return True iff the class should be used for 
 		unmarshalling a field with the given tag."""
-		return tag == cls.identifier + 4
+		return tag == cls.id + 4
 
 	@property
 	def _eoc(self):
@@ -388,7 +399,7 @@ class String(Primitive):
 register_value_type(String, range(17, 128))
 
 
-class AnyDefinedBy(Base):
+class AnyDefinedBy(Primitive):
 	def __init__(self, reference_name, *args, **kwargs):
 		super(AnyDefinedBy, self).__init__(*args, **kwargs)
 		self.reference_name = reference_name
@@ -397,8 +408,12 @@ class AnyDefinedBy(Base):
 	def handles_tag(cls, tag):
 		return False
 
+	def marshal(self):
+		# Forward to value, which must, unfortunately, understand marshal
+		return self.value.marshal()
+
 	def unmarshal(self, data):
-		# FIXME This is ugly
+		# FIXME Damn, this is ugly
 		tag = data[0]
 		value_type = value_types.get(tag)
 		if value_type is None:

@@ -64,7 +64,7 @@ class TWPClient(object):
 	def recv_messages(self):
 		"""Recv messages until all available data can be parsed into messages
 		or a timeout occurs. Return the list of parsed messages."""
-		# TODO maybe make this a generator for concurrency.
+		# TODO Optional parameter msg_count=1, to guarantee result length?
 		messages = []
 		while True:
 			# Recv data
