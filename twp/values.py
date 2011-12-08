@@ -5,6 +5,15 @@ import copy
 import struct
 from .error import TWPError
 
+# Global dict that contains a mapping of tag -> Value class
+value_types = {}
+def register_value_type(value_type, *args):
+	if not len(args):
+		args = [value_type.tag]
+	for tag in args:
+		value_types[tag] = value_type
+
+
 class Base(object):
 	# FIXME find a better class name
 	"""Abstract base class for TWP types."""
@@ -83,11 +92,11 @@ class NoValueBase(Base):
 
 class EndOfContent(NoValueBase):
 	tag = 0
-
+register_value_type(EndOfContent)
 
 class NoValue(NoValueBase):
 	tag = 1
-
+register_value_type(NoValue)
 
 class ComplexType(type):
 	"""Metaclass for all Complex classes."""
@@ -208,7 +217,7 @@ class Struct(Complex):
 class Sequence(Complex):
 	tag = 3
 	# TODO implement
-
+register_value_type(Sequence)
 
 class Message(Complex):
 	@property
@@ -235,6 +244,7 @@ class Message(Complex):
 		fields = super(Message, self).get_fields()
 		fields.append(self._eoc)
 		return fields
+register_value_type(Message, range(4,12))
 
 
 class Union(Complex):
@@ -257,6 +267,7 @@ class RegisteredExtension(Complex):
 		id = self._marshal_registered_id()
 		fields = super(RegisteredExtension, self)._marshal_value()
 		return id + fields
+register_value_type(RegisteredExtension)
 
 
 class Primitive(Base):
@@ -305,6 +316,7 @@ class Int(Primitive):
 	def handles_tag(cls, tag):
 		all_tags = [t for t, (l, f) in cls._formats.items()]
 		return tag in all_tags
+register_value_type(Int, 13, 14)
 
 
 class String(Primitive):
@@ -373,6 +385,25 @@ class String(Primitive):
 			raise ValueError("Value too long for long string encoding.")
 		length = struct.pack('>I', len(value))
 		return length + value
+register_value_type(String, range(17, 128))
+
+
+class AnyDefinedBy(Base):
+	def __init__(self, reference_name, *args, **kwargs):
+		super(AnyDefinedBy, self).__init__(*args, **kwargs)
+		self.reference_name = reference_name
+
+	@classmethod
+	def handles_tag(cls, tag):
+		return False
+
+	def unmarshal(self, data):
+		# FIXME This is ugly
+		tag = data[0]
+		value_type = value_types.get(tag)
+		if value_type is None:
+			raise TWPError("Invalid tag: %s" % tag)
+		return value_type.unmarshal(data)
 
 
 class MessageError(RegisteredExtension):
