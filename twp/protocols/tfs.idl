@@ -1,0 +1,13 @@
+protocol TFS = ID 4 {
+	sequence<string> path;
+	sequence<string> filelist;
+	struct list_result{
+		filelist directories;
+		filelist files;
+	}
+	struct stat_result{
+		int size;
+		int mtime;
+		int atime;
+	}
+}
