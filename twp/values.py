@@ -203,12 +203,15 @@ class Struct(Complex):
 	tag = 2
 
 	@staticmethod
-	def with_fields(**kwargs):
+	def with_fields(*args, **kwargs):
 		"""Returns an instance of Struct with the fields given in kwargs."""
 		# This is needed, because Structs can sometimes occur without having a 
 		# template class that defines all the fields. Maybe Message this is 
 		# needed for Message as well.
 		struct = Struct()
+		for field in args:
+			assert(field.name)
+			struct._add_field(field.name, field)
 		for name, field in kwargs.items():
 			struct._add_field(name, field)
 		return struct

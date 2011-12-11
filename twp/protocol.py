@@ -8,7 +8,7 @@ TWP_MAGIC = b"TWP3\n"
 class TWPClient(object):
 	protocol_id = 2
 
-	def __init__(self, host='www.dcl.hpi.uni-potsdam.de', port=80, force_ip_v6=False):
+	def __init__(self, host='localhost', port=5000, force_ip_v6=False):
 		self._builder = MessageBuilder(self)
 		self._init_socket(host, port, force_ip_v6=False)
 		self._init_session()
@@ -91,6 +91,9 @@ class TWPClient(object):
 				break
 		return messages
 
+	def unmarshal_any_defined_by(self, message, field, data):
+		raise NotImplementedError("No unmarshalling for AnyDefinedBy specified")
+
 
 # TODO Use a pattern for this.
 class MessageBuilder(object):
@@ -143,7 +146,11 @@ class MessageBuilder(object):
 			self._next_field()
 		while not self.current_field is None:
 			try:
-				value, length = self.current_field.unmarshal(self.data)
+				if isinstance(values.AnyDefinedBy, self.current_field):
+					value, length = self.protocol.unmarshal_any_defined_by(
+						message, self.current_field, self.data)
+				else:
+					value, length = self.current_field.unmarshal(self.data)
 			except ValueError:
 				# We need more bytes
 				break

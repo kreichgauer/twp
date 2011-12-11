@@ -21,8 +21,32 @@ class StatResult(twp.values.Struct):
     mtime = twp.values.Int()
     atime = twp.values.Int()
 
-
 class TFS(twp.protocols.rpc.RPCClient):
+    @property
+    def interface(self):
+        return {
+            "open": ((
+                    Path(name="directory"),
+                    twp.values.String(name="file"),
+                    twp.values.Int(name="mode"),),
+                twp.values.Int()),
+            "read": ((
+                    twp.values.Int(name="fh"),
+                    twp.values.Int(name="count"),),
+                twp.values.Binary()),
+            "write": ((
+                    twp.values.Int(name="fh"),
+                    twp.values.Binary(name="data")),
+                twp.values.NoValue()),
+            "seek": ((
+                    twp.values.Int(name="fh"),
+                    twp.values.Int(name="offset")),
+                twp.values.NoValue()),
+            "close": ((
+                    twp.values.Int(name="filehandle")),
+                twp.values.NoValue())
+        }
+
     def open(self, directory, file, mode):
         params = {
             "directory": Path(value=directory),
