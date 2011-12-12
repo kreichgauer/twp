@@ -109,7 +109,7 @@ class _Complex(Base):
 
 	def __init__(self, *args, optional=False, name=None):
 		super(_Complex, self).__init__(optional=optional, name=name)
-		self._update_fields_positional(*args)
+		self.update_fields(*args)
 
 	def get_fields(self):
 		return self._fields
@@ -126,7 +126,7 @@ class _Complex(Base):
 			total_length += length
 		return None, total_length
 
-	def _update_fields_positional(self, *args):
+	def update_fields(self, *args):
 		fields = self.get_fields()
 		if len(args) > len(fields):
 			raise ValueError("Too many arguments")
@@ -423,6 +423,9 @@ class String(Primitive):
 		length = struct.pack('>I', len(value))
 		return length + value
 register_value_type(String, range(17, 128))
+
+class Binary(Primitive):
+	pass
 
 
 class AnyDefinedBy(Primitive):

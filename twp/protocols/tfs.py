@@ -2,13 +2,12 @@ import twp.values
 import twp.protocol
 import twp.protocols.rpc
 
-
 class Path(twp.values.Sequence):
-    type = twp.values.String()
+    _fields = [twp.values.String(),]
 
 
 class Filelist(twp.values.Sequence):
-    type = twp.values.String()
+    _fields = [twp.values.String(),]
 
 
 class ListResult(twp.values.Struct):
@@ -21,46 +20,44 @@ class StatResult(twp.values.Struct):
     mtime = twp.values.Int()
     atime = twp.values.Int()
 
+
 class TFS(twp.protocols.rpc.RPCClient):
-    @property
-    def interface(self):
-        return {
-            "open": ((
-                    Path(name="directory"),
-                    twp.values.String(name="file"),
-                    twp.values.Int(name="mode"),),
-                twp.values.Int()),
-            "read": ((
-                    twp.values.Int(name="fh"),
-                    twp.values.Int(name="count"),),
-                twp.values.Binary()),
-            "write": ((
-                    twp.values.Int(name="fh"),
-                    twp.values.Binary(name="data")),
-                twp.values.NoValue()),
-            "seek": ((
-                    twp.values.Int(name="fh"),
-                    twp.values.Int(name="offset")),
-                twp.values.NoValue()),
-            "close": ((
-                    twp.values.Int(name="filehandle")),
-                twp.values.NoValue())
-        }
-
-    def open(self, directory, file, mode):
-        params = {
-            "directory": Path(value=directory),
-            "file": twp.values.String(value=file),
-            "mode": twp.values.Int(value=mode),
-        }
-        reply = self.request("open", params, True)
-
-    def read(self, filehandle, count): pass
-    def write(self, filehandle, data): pass
-    def seek(self, filehandle, offset): pass
-    
-    def close(self, filehandle):
-        params = {
-            "filehandle": twp.values.Int(value=filehandle)
-        }
-        self.request("close", params, False)
+    def __init__(self, *args, **kwargs):
+        super(TFS, self).__init__(*args, **kwargs)
+        self.open = twp.protocols.rpc.RPCMethod(self, "open", (
+                Path(name="directory"),
+                twp.values.String(name="file"),
+                twp.values.Int(name="mode")
+            ), twp.values.Int())
+        self.read = twp.protocols.rpc.RPCMethod(self, "read", (
+                twp.values.Int(name="fh"),
+                twp.values.Int(name="count")
+            ), twp.values.Binary())
+        self.write = twp.protocols.rpc.RPCMethod(self, "write", (
+                twp.values.Int(name="fh"),
+                twp.values.Binary(name="data")
+            ), twp.values.NoValue())
+        self.seek = twp.protocols.rpc.RPCMethod(self, "seek", (
+                twp.values.Int(name="fh"),
+                twp.values.Int(name="offset")
+            ), twp.values.NoValue()),
+        self.close = twp.protocols.rpc.RPCMethod(self, "close", (
+                twp.values.Int(name="filehandle")
+            ), twp.values.NoValue())
+        self.listdir = twp.protocols.rpc.RPCMethod(self, "listdir", (
+                Path(name="directory")        
+            ), ListResult())
+        self.stat = twp.protocols.rpc.RPCMethod(self, "stat", (
+                Path(name="directory"), 
+                twp.values.String(name="file")
+            ), ListResult())
+        self.mkdir = twp.protocols.rpc.RPCMethod(self, "listdir", (
+                Path(name="directory")
+            ), ListResult())
+        self.rmdir = twp.protocols.rpc.RPCMethod(self, "listdir", (
+                Path(name="directory")
+            ), ListResult())
+        self.remove = twp.protocols.rpc.RPCMethod(self, "listdir", (
+                Path(name="directory"),
+                twp.values.String(name="file")
+            ), ListResult())

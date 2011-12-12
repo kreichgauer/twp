@@ -1,3 +1,5 @@
+from collections import OrderedDict
+import copy
 import twp.values
 import twp.protocol
 
@@ -23,6 +25,30 @@ class CloseConnection(twp.values.Message):
 class RPCException(twp.values.Struct):
     extension_id = 3
     text = twp.values.String()
+
+class RPCMethod(object):
+    def __init__(self, protocol, name, interface, result, response_expected=True):
+        self.protocol = protocol
+        self.name = name
+        self.interface = interface
+        self.result = result
+        self.response_expected = response_expected
+
+    def get_parameter_struct(self):
+        params = OrderedDict(copy.deepcopy(self.interface))
+        params_struct = twp.values.Struct.with_fields(*params)
+        return params_struct
+
+    def get_result_value(self):
+        return copy.deepcopy(self.result)
+
+    def call(self, *args):
+        params = self.get_parameter_struct()
+        params.update_fields(*args)
+        self.protocol.request(self.name, params, self.response_expected)
+
+    def __call__(self, *args, **kwargs):
+        self.call(*args, **kwargs)
 
 class RPCClient(twp.protocol.TWPClient):
     protocol_id = 1
@@ -52,15 +78,18 @@ class RPCClient(twp.protocol.TWPClient):
         assert(field.reference_name == "operation")
         # Get the corresponding parameter list from `self.interfaces`
         defined_by_field = message._fields[field.reference_name]
-        operation = defined_by_field.value
-        assert(operation) # Method name must have been given
+        # Get RPCMethod instance
+        assert(defined_by_field.value) # Method name must have been given
+        operation = getattr(self, defined_by_field.value)
+        if not isinstance(RPCMethod, operation):
+            raise TWPError("No such method %s" % operation)
         # Unmarshal method parameters into Struct and put into `parameters` value
-        params_struct = self._build_parameter_struct(operation)
+        params_struct = operation.build_parameter_struct()
         field.value = params_struct
         return params_struct.unmarshal(data)
 
-    def request(self, operation, parameters=None, response_expected=True):
-        request = self._build_request(operation, parameters, response_expected)
+    def request(self, operation, parameters, response_expected=True):
+        request = self._build_request(response_expected, operation, parameters)
         self.send(request)
         reply = None
         if response_expected:
@@ -69,16 +98,11 @@ class RPCClient(twp.protocol.TWPClient):
                 raise TWPError("Reply expected")
         return reply
 
-    def _build_request(self, operation, parameters, response_expected):
-        parameters = self._build_parameters(parameters)
+    def _build_request(self, response_expected, operation, parameters):
         id = self._get_request_id()
+        response_expected = int(response_expected)
         request = Request(id, response_expected, operation, parameters)
         return request
-
-    def _build_parameter_struct(self, operation):
-        params = self.interface[operation][0]
-        params_struct = twp.values.Struct.with_fields(*params)
-        return params_struct
 
     def _get_request_id(self):
         id = self.request_id
