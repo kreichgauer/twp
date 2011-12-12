@@ -35,7 +35,7 @@ class RPCMethod(object):
         self.response_expected = response_expected
 
     def get_parameter_struct(self):
-        params = OrderedDict(copy.deepcopy(self.interface))
+        params = copy.deepcopy(self.interface)
         params_struct = twp.values.Struct.with_fields(*params)
         return params_struct
 
@@ -90,7 +90,7 @@ class RPCClient(twp.protocol.TWPClient):
 
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)
-        self.send(request)
+        self.send_message(request)
         reply = None
         if response_expected:
             reply = self.recv_messages()[0]
