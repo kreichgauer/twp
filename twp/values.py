@@ -222,6 +222,11 @@ class Struct(_Struct):
 
 class Sequence(_Complex):
 	tag = 3
+	def __getitem__(self, idx):
+		return self._fields[idx].value
+
+	def __setitem__(self, idx, value):
+		self._fields[idx].value = value
 register_value_type(Sequence)
 
 
