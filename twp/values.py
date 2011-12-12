@@ -38,9 +38,8 @@ class Base(object):
 		if not self.__class__.handles_tag(tag):
 			raise TWPError("Invalid tag %d" % tag)
 		unmarshalled, length = self._unmarshal(tag, value)
-		self.value = unmarshalled
 		length += 1
-		return unmarshalled, length
+		return length
 
 	def is_optional(self):
 		return self._optional
@@ -98,8 +97,59 @@ class NoValue(NoValueBase):
 	tag = 1
 register_value_type(NoValue)
 
-class ComplexType(type):
-	"""Metaclass for all Complex classes."""
+
+class _Complex(Base):
+	def __new__(cls, *args, **kwargs):
+		instance = super(_Complex, cls).__new__(cls)
+		# Copy all the fields to be per instance, even if defined per class
+		# This is a strange way of achieving this. Better have types.Foo() 
+		# return a class/factory instead and create the instances in __new__
+		instance._fields = copy.deepcopy(cls._fields)
+		return instance
+
+	def __init__(self, *args, optional=False, name=None):
+		super(_Complex, self).__init__(optional=optional, name=name)
+		self._update_fields_positional(*args)
+
+	def get_fields(self):
+		return self._fields
+
+	def _unmarshal(self, tag, value):
+		total_length = 0
+		# Marhal value field for field
+		for field in self.get_fields():
+			if not len(value):
+				# Value too short, wait for more input
+				raise ValueError()
+			length = field.unmarshal(value)
+			value = value[length:]
+			total_length += length
+		return None, total_length
+
+	def _update_fields_positional(self, *args):
+		fields = self.get_fields()
+		if len(args) > len(fields):
+			raise ValueError("Too many arguments")
+		for field, value in zip(fields, args):
+			field.value = value
+
+	def _marshal_value(self):
+		marshalled_fields = [field.marshal() for field in self.get_fields()]
+		marshalled = b"".join(marshalled_fields)
+		# TODO extensions?
+		marshalled += EndOfContent().marshal()
+		return marshalled
+
+	def is_empty(self):
+		# Return True iff one non-optional field is empty
+		for field in self.get_fields():
+			if not field.is_optional() and field.is_empty():
+				return True
+		return False
+
+
+class _StructType(type):
+	"""Metaclass for Complex classes with fields."""
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
 		# Use an OrderedDict as __dict__, so that the marshaling order of 
@@ -128,69 +178,16 @@ class ComplexType(type):
 		return False
 
 
-class Complex(Base, metaclass=ComplexType):
-	def __new__(cls, *args, **kwargs):
-		instance = super(Complex, cls).__new__(cls)
-		# Copy all the fields to be per instance, even if defined per class
-		# This is a strange way of achieving this. Better have types.Foo() 
-		# return a class/factory instead and create the instances in __new__
-		instance._fields = copy.deepcopy(cls._fields)
-		return instance
-
-	def __init__(self, *args, optional=False, name=None, **kwargs):
-		super(Complex, self).__init__(optional=optional, name=name)
-		self._update_fields_positional(*args)
-		self._update_fields_by_name(**kwargs)
-
-	def _unmarshal(self, tag, value):
-		attrs = {}
-		total_length = 0
-		# Marhal value field for field
-		for field in self._fields.values():
-			if not len(value):
-				# Value too short, wait for more input
-				raise ValueError()
-			unmarshalled, length = field.unmarshal(value)
-			value = value[length:]
-			total_length += length
-			attrs[field.name] = unmarshalled
-		return attrs, total_length
-
-	def _update_fields_positional(self, *args):
-		if len(args) > len(self._fields):
-			raise ValueError("Too many arguments")
-		for (name, field), value in zip(self._fields.items(), args):
-			setattr(self, name, value)
-
-	def _update_fields_by_name(self, **kwargs):
-		for k, v in kwargs.items():
-			is_field = isinstance(self._fields.get(k), Base)
-			if not is_field:
-				raise ValueError("No field named %s" % k)
-			setattr(self, k, v)
-
+class _Struct(_Complex, metaclass=_StructType):
 	def get_fields(self):
-		return list(self._fields.values())
-
-	def _marshal_value(self):
-		marshalled_fields = [field.marshal() for field in self._fields.values()]
-		marshalled = b"".join(marshalled_fields)
-		# TODO extensions?
-		marshalled += EndOfContent().marshal()
-		return marshalled
-
-	def is_empty(self):
-		for name, field in self._fields.items():
-			if not field.is_optional() and field.is_empty():
-				return True
-		return False
+		return self._fields.values()
 
 	def __setattr__(self, k, v):
 		field = self._fields.get(k)
 		if not field is None:
 			field.value = v
 		else:
-			super(Complex, self).__setattr__(k, v)
+			super(_Complex, self).__setattr__(k, v)
 	
 	def __getattr__(self, k):
 		field = self._fields.get(k)
@@ -199,7 +196,7 @@ class Complex(Base, metaclass=ComplexType):
 		return field.value
 
 
-class Struct(Complex):
+class Struct(_Struct):
 	tag = 2
 
 	@staticmethod
@@ -223,15 +220,12 @@ class Struct(Complex):
 		field.name = field.name or name
 
 
-
-class Sequence(Complex):
+class Sequence(_Complex):
 	tag = 3
-	# TODO implement
-	# Possible implementation strategy: Change Complex._fields into list. Would
-	# probably need a dict of (target, field) for setattr on Message and Struct.
 register_value_type(Sequence)
 
-class Message(Complex):
+
+class Message(_Struct):
 	@property
 	def tag(self):
 		"""The Message's tag. This equals 4 plus the id. Raises a 
@@ -255,18 +249,32 @@ class Message(Complex):
 		return self.__eoc
 
 	def get_fields(self):
-		fields = super(Message, self).get_fields()
+		fields = list(super(Message, self).get_fields())
 		fields.append(self._eoc)
 		return fields
+
+	# FIXME code duplication w/ Struct
+	def __setattr__(self, k, v):
+		field = self._fields.get(k)
+		if not field is None:
+			field.value = v
+		else:
+			super(_Complex, self).__setattr__(k, v)
+	
+	def __getattr__(self, k):
+		field = self._fields.get(k)
+		if field is None:
+			raise AttributeError()
+		return field.value
 register_value_type(Message, range(4,12))
 
 
-class Union(Complex):
+class Union(_Complex):
 	# TODO implement
 	pass
 
 
-class RegisteredExtension(Complex):
+class RegisteredExtension(_Complex):
 	tag = 12
 
 	@property
@@ -293,6 +301,16 @@ class Primitive(Base):
 	def is_empty(self):
 		return self.value is None
 
+	def unmarshal(self, data):
+		# FIXME handle NoValue
+		tag = data[0]
+		value = data[1:]
+		if not self.__class__.handles_tag(tag):
+			raise TWPError("Invalid tag %d" % tag)
+		unmarshalled, length = self._unmarshal(tag, value)
+		self.value = unmarshalled
+		length += 1
+		return length
 
 class Int(Primitive):
 	_formats = {

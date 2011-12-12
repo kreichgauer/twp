@@ -147,10 +147,10 @@ class MessageBuilder(object):
 		while not self.current_field is None:
 			try:
 				if isinstance(values.AnyDefinedBy, self.current_field):
-					value, length = self.protocol.unmarshal_any_defined_by(
+					length = self.protocol.unmarshal_any_defined_by(
 						message, self.current_field, self.data)
 				else:
-					value, length = self.current_field.unmarshal(self.data)
+					length = self.current_field.unmarshal(self.data)
 			except ValueError:
 				# We need more bytes
 				break
