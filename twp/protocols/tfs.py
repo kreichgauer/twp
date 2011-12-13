@@ -61,5 +61,14 @@ class TFS(twp.protocols.rpc.RPCClient):
                     Path(name="directory"),
                     twp.values.String(name="file")
                 ), twp.values.NoValue()),
+            twp.protocols.rpc.RPCMethod("monitor", (
+                    Path(name="directory"),
+                    twp.values.Int(name="recursive"),
+                    twp.values.Binary(name="host")
+                    twp.values.Int(name="port")
+                ), twp.values.Int()),
+            twp.protocols.rpc.RPCMethod("stop_monitoring", (
+                    twp.values.Int(name="h")
+                ), twp.values.Int()),
         ]
         super(TFS, self).__init__(*args, **kwargs)

@@ -390,7 +390,18 @@ class String(Primitive):
 
 
 class Binary(Primitive):
-	pass
+	def _unmarshal_value(self, tag, value):
+		length = value[0:]
+		if len(value) > length:
+			# Not enough bytes
+			raise ValueError()
+		unmarshalled = value[:length]
+		return unmarshalled, length
+
+	def _marshal_value(self, value):
+		length = len(value)
+		marshalled = bytes([length]) + bytes(value)
+		return marshalled
 
 
 class AnyDefinedBy(Primitive):
@@ -403,16 +414,10 @@ class AnyDefinedBy(Primitive):
 		return False
 
 	def marshal(self):
-		# Forward to value, which must, unfortunately, understand marshal
-		return self.value.marshal()
+		raise NotImplementedError("AnyDefinedBy can't marshal values")
 
 	def unmarshal(self, data):
-		# Shiiit
-		tag = data[0]
-		value_type = value_types.get(tag)
-		if value_type is None:
-			raise TWPError("Invalid tag: %x" % tag)
-		return value_type.unmarshal(data)
+		raise NotImplementedError("AnyDefinedBy can't unmarshal values")
 
 
 class MessageError(RegisteredExtension):
