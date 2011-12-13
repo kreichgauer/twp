@@ -106,6 +106,14 @@ class _ComplexType(type):
 
 
 class _Complex(Base, metaclass=_ComplexType):
+	def __new__(cls, *args, **kwargs):
+		instance = super(_Complex, cls).__new__(cls)
+		# Copy all the fields to be per instance, even if defined per class
+		# This is a strange way of achieving this. Better have types.Foo() 
+		# return a class/factory instead and create the instances in __new__
+		instance._fields = copy.deepcopy(cls._fields)
+		return instance
+
 	def _unmarshal(self, tag, value):
 		unmarshalled = {}
 		total_length = 0
@@ -150,10 +158,10 @@ class _Complex(Base, metaclass=_ComplexType):
 class Struct(_Complex):
 	tag = 2
 
-	@staticmethod
-	def with_fields(*args, **kwargs):
+	@classmethod
+	def with_fields(cls, *args, name=None, **kwargs):
 		"""Returns an instance of Struct with the fields given in kwargs."""
-		struct = Struct()
+		struct = cls(name=name)
 		for field in args:
 			assert(field.name)
 			struct._add_field(field.name, field)
@@ -221,12 +229,12 @@ class Message(_Complex):
 		self.protocol = None
 		return marshalled
 
-	def _marshal_field(self, field, value, into):
+	def _marshal_field(self, field, values, into):
 		# Have Protocol resolve AnyDefinedBy fields
 		if isinstance(field, AnyDefinedBy):
-			reference_value = into[field.reference_name]
+			reference_value = values[field.reference_name]
 			field = self.protocol.define_any_defined_by(field, reference_value)
-		return super(Message, self)._marshal_field(field, value, into)
+		return super(Message, self)._marshal_field(field, values, into)
 
 	def unmarshal_message(self, data, protocol):
 		self.protocol = protocol
@@ -292,8 +300,12 @@ class Int(Primitive):
 
 	def _pack_with_format(self, format, value):
 		return struct.pack(format, value)
+	
+	def _marshal_tag(self, value):
+		return b""
 
-	def marshal(self, value):
+	def _marshal_value(self, value):
+		# Marshal tag and value, it's easier. `marshal()` still checks for None
 		for tag, (length, format) in self._formats.items():
 			try:
 				value = self._pack_with_format(format, value)

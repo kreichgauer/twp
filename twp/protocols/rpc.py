@@ -27,24 +27,27 @@ class RPCException(twp.values.Struct):
     text = twp.values.String()
 
 class RPCMethod(object):
-    def __init__(self, protocol, name, interface, result, response_expected=True):
-        self.protocol = protocol
+    def __init__(self, name, interface, result, response_expected=True):
         self.name = name
         self.interface = interface
         self.result = result
         self.response_expected = response_expected
+    
+    def visit(self, protocol):
+        self.protocol = protocol
+        if hasattr(self.protocol, self.name):
+            raise TypeError("Protocol already has attribute %s" % self.name)
+        setattr(self.protocol, self.name, self)
 
     def get_parameter_struct(self):
         params = copy.deepcopy(self.interface)
-        params_struct = twp.values.Struct.with_fields(*params)
+        params_struct = twp.values.Struct.with_fields(name="parameters", *params)
         return params_struct
 
     def get_result_value(self):
         return copy.deepcopy(self.result)
 
-    def call(self, *args):
-        params = self.get_parameter_struct()
-        params.update_fields(*args)
+    def call(self, **params):
         self.protocol.request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
@@ -58,17 +61,16 @@ class RPCClient(twp.protocol.TWPClient):
         CancelRequest,
         CloseConnection,
     ]
+    methods = []
 
     def __init__(self, *args, **kwargs):
         super(RPCClient, self).__init__(*args, **kwargs)
         self.request_id = 0
+        self._init_methods()
 
-    @property
-    def interface(self):
-        """Define a mapping of method-name -> (parameter sequence, return value)
-        Note that this implementation supports only in-parameters, and 0 or 1
-        result values."""
-        raise NotImplementedError("No interface defined")
+    def _init_methods(self):
+        for method in self.methods:
+            method.visit(self)
 
     def define_any_defined_by(self, field, reference_value):
         assert(field.name == "parameters")
@@ -76,15 +78,16 @@ class RPCClient(twp.protocol.TWPClient):
 
     def get_params(self, operation):
         operation = getattr(self, operation)
-        if not isinstance(RPCMethod, operation):
+        if not isinstance(operation, RPCMethod):
             raise TWPError("No such method %s" % operation)
-        return operation.build_parameter_struct()
+        return operation.get_parameter_struct()
 
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)
         self.send_message(request)
         reply = None
         if response_expected:
+            # FIXME check request_id
             reply = self.recv_messages()[0]
             if not isinstance(msg, Reply):
                 raise TWPError("Reply expected")
@@ -93,7 +96,8 @@ class RPCClient(twp.protocol.TWPClient):
     def _build_request(self, response_expected, operation, parameters):
         id = self._get_request_id()
         response_expected = int(response_expected)
-        request = Request(id, response_expected, operation, parameters)
+        request = Request(request_id=id, response_expected=response_expected, 
+            operation=operation, parameters=parameters)
         return request
 
     def _get_request_id(self):
