@@ -40,6 +40,9 @@ class RPCMethod(object):
         setattr(self.protocol, self.name, self)
 
     def get_parameter_struct(self):
+        if len(self.interface) == 1:
+            self.interface[0].name = "parameters"
+            return self.interface[0]
         params = copy.deepcopy(self.interface)
         params_struct = twp.values.Struct.with_fields(name="parameters", *params)
         return params_struct
@@ -48,6 +51,8 @@ class RPCMethod(object):
         return copy.deepcopy(self.result)
 
     def call(self, **params):
+        if len(params) == 1:
+            _, params = params.popitem()
         self.protocol.request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
