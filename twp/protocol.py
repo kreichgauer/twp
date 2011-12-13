@@ -121,12 +121,25 @@ class TWPClient(Connection):
 
 class TWPConsumer(socketserver.BaseRequestHandler):
 	def handle(self):
+		if not self.recv_twp_magic():
+			log.warn("Invalid TWP magic")
+			return
 		while True:
 			messages = self.protocol.recv_messages()
 			if not len(messages):
 				break
 			for message in messages:
 				self.on_message(message)
+
+	def recv_raw(self, size):
+		return self.request.recv(size)
+
+	def recv_twp_magic(self):
+		magic = b""
+		while len(magic) < len(TWP_MAGIC):
+			data = self.request.recv(len(TWP_MAGIC))
+			data += magic
+		return magic == TWP_MAGIC
 
 	def on_message(self, message):
 		log.debug("Recvd message: %s" % message)
