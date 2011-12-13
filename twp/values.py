@@ -22,7 +22,7 @@ class Base(object):
 		tag = data[0]
 		value = data[1:]
 		if not self.__class__.handles_tag(tag):
-			raise TWPError("Invalid tag %d" % tag)
+			raise TWPError("Invalid tag %x" % tag)
 		unmarshalled, length = self._unmarshal(tag, value)
 		length += 1
 		return unmarshalled, length
@@ -233,12 +233,16 @@ class Message(_Complex):
 		unmarshalled, length = self.unmarshal(data)
 		self.values = unmarshalled
 		self.protocol = None
+		return unmarshalled, length
 
 	def _unmarshal_field(self, field, value, into):
 		if isinstance(field, AnyDefinedBy):
 			reference_value = into[field.reference_name]
 			field = self.protocol.define_any_defined_by(field, reference_value)
 		return super(Message, self)._unmarshal_field(field, value, into)
+
+	def __repr__(self):
+		return "%s: %s" % (self.__class__, self.values)
 
 
 class Union(_Complex):
@@ -395,7 +399,7 @@ class AnyDefinedBy(Primitive):
 		tag = data[0]
 		value_type = value_types.get(tag)
 		if value_type is None:
-			raise TWPError("Invalid tag: %s" % tag)
+			raise TWPError("Invalid tag: %x" % tag)
 		return value_type.unmarshal(data)
 
 

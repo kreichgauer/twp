@@ -35,8 +35,8 @@ class TWPClient(object):
 
 	def _init_session(self):
 		self._send(TWP_MAGIC)
-		protocol_id = values.Int(value=self.protocol_id)
-		self.send_message(protocol_id)
+		protocol_id = values.Int().marshal(self.protocol_id)
+		self._send(protocol_id)
 
 	def _send(self, data):
 		data = bytes(data)
@@ -44,7 +44,7 @@ class TWPClient(object):
 		log.debug('Sent data: %r' % data)
 
 	def send_message(self, msg):
-		data = msg.marshal()
+		data = msg.marshal_message(self)
 		self._send(data)
 
 	@property
@@ -108,9 +108,6 @@ class MessageBuilder(object):
 		self.processed = 0
 		# Current message
 		self.message = None
-		# Iterator keeping track which field we're at
-		self.field_iterator = None
-		self.current_field = None
 
 	def build_message(self, data):
 		"""Feed with bytes. Returns a message or None, and the number of 
@@ -120,11 +117,8 @@ class MessageBuilder(object):
 		if not self.message:
 			self._create_message()
 		self._unmarshal_values()
-		result = None, self.processed
-		if self._result_ready():
-			# FIXME check if message is valid, i.e. no empty non-optional fields
-			result = self.message, self.processed
-			self.reset()
+		result = self.message, self.processed
+		self.reset()
 		return result
 
 	def _create_message(self):
@@ -137,35 +131,15 @@ class MessageBuilder(object):
 		if message is None:
 			raise TWPError("Unknown message tag %d" % tag)
 		self.message = message
-		self.field_iterator = iter(self.message.get_fields())
-		self._did_process(1)
 
 	def _unmarshal_values(self):
-		if self.current_field is None:
-			self._next_field()
-		while not self.current_field is None:
-			try:
-				if isinstance(values.AnyDefinedBy, self.current_field):
-					length = self.protocol.unmarshal_any_defined_by(
-						message, self.current_field, self.data)
-				else:
-					length = self.current_field.unmarshal(self.data)
-			except ValueError:
-				# We need more bytes
-				break
+		try:
+			values, length = self.message.unmarshal_message(self.data, self.protocol)
 			self._did_process(length)
-			self._next_field()
-			# TODO handle extensions
+		except ValueError:
+			# We need more bytes
+			pass
 
 	def _did_process(self, length):
 		self.data = self.data[length:]
 		self.processed += length
-
-	def _next_field(self):
-		try:
-			self.current_field = next(self.field_iterator)
-		except StopIteration:
-			self.current_field = None
-
-	def _result_ready(self):
-		return self.current_field is None
