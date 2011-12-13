@@ -12,12 +12,6 @@ class Protocol(object):
 
 	def init_connection(self, connection):
 		self.connection = connection
-		self._init_session()
-
-	def _init_session(self):
-		self.connection.send_raw(TWP_MAGIC)
-		protocol_id = values.Int().marshal(self.protocol_id)
-		self.connection.send_raw(protocol_id)
 
 	@property
 	def message_tags(self):
@@ -41,10 +35,8 @@ class Protocol(object):
 
 
 class Connection(object):
-	def __init__(self):
-		self.init_protocol()
-
 	def init_protocol(self):
+		"""Derived classes have to call this to initialize the protocol."""
 		self.protocol = self.protocol_class()
 		self.protocol.init_connection(self)
 
@@ -84,6 +76,12 @@ class TWPClient(Connection):
 	def __init__(self, host='localhost', port=5000, force_ip_v6=False):
 		self._init_socket(host, port, force_ip_v6=False)
 		self.init_protocol()
+		self._init_session()
+
+	def _init_session(self):
+		self.send_raw(TWP_MAGIC)
+		protocol_id = values.Int().marshal(self.protocol_id)
+		self.send_raw(protocol_id)
 
 	def _init_socket(self, host, port, force_ip_v6=False):
 		socktype = socket.SOCK_STREAM
@@ -119,17 +117,26 @@ class TWPClient(Connection):
 		return self.socket.recv(size)
 
 
-class TWPConsumer(socketserver.BaseRequestHandler):
+class TWPConsumer(socketserver.BaseRequestHandler, Connection):
+	def setup(self):
+		self.init_protocol()
+
 	def handle(self):
-		if not self.recv_twp_magic():
-			log.warn("Invalid TWP magic")
-			return
-		while True:
-			messages = self.protocol.recv_messages()
-			if not len(messages):
-				break
-			for message in messages:
-				self.on_message(message)
+		try:
+			if not self.recv_twp_magic():
+				log.warn("Invalid TWP magic")
+				return
+			while True:
+				messages = self.recv_messages()
+				if not len(messages):
+					break
+				for message in messages:
+					self.on_message(message)
+		except Exception as e:
+			log.error("Uncaught exception %s" % e)
+
+	def send_raw(self, data):
+		return self.request.send(data)
 
 	def recv_raw(self, size):
 		return self.request.recv(size)
@@ -138,7 +145,7 @@ class TWPConsumer(socketserver.BaseRequestHandler):
 		magic = b""
 		while len(magic) < len(TWP_MAGIC):
 			data = self.request.recv(len(TWP_MAGIC))
-			data += magic
+			magic += data
 		return magic == TWP_MAGIC
 
 	def on_message(self, message):
