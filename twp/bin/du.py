@@ -21,7 +21,7 @@ def du_directory(client, directory):
         print("%d\t%s" % (stat['size'], path))
 
 def du(host, port, directory):
-    client = tfs.TFS(host, port)
+    client = tfs.TFSClient(host, port)
     directory = directory.split("/")
     du_directory(client, directory)
 

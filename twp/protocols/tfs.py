@@ -21,8 +21,8 @@ class StatResult(twp.values.Struct):
     atime = twp.values.Int()
 
 
-class TFS(twp.protocols.rpc.RPCClient):
-    def __init__(self, *args, **kwargs):
+class TFS(twp.protocols.rpc.RPC):
+    def __init__(self):
         self.methods = [
             twp.protocols.rpc.RPCMethod("open", (
                     Path(name="directory"),
@@ -64,11 +64,14 @@ class TFS(twp.protocols.rpc.RPCClient):
             twp.protocols.rpc.RPCMethod("monitor", (
                     Path(name="directory"),
                     twp.values.Int(name="recursive"),
-                    twp.values.Binary(name="host")
-                    twp.values.Int(name="port")
+                    twp.values.Binary(name="host"),
+                    twp.values.Int(name="port"),
                 ), twp.values.Int()),
             twp.protocols.rpc.RPCMethod("stop_monitoring", (
-                    twp.values.Int(name="h")
+                    twp.values.Int(name="h"),
                 ), twp.values.Int()),
         ]
-        super(TFS, self).__init__(*args, **kwargs)
+        super(TFS, self).__init__()
+
+class TFSClient(twp.protocols.rpc.RPCClient):
+    protocol_class = TFS

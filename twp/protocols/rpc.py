@@ -33,11 +33,11 @@ class RPCMethod(object):
         self.result = result
         self.response_expected = response_expected
     
-    def visit(self, protocol):
-        self.protocol = protocol
-        if hasattr(self.protocol, self.name):
-            raise TypeError("Protocol already has attribute %s" % self.name)
-        setattr(self.protocol, self.name, self)
+    def visit(self, client):
+        self.client = client
+        if hasattr(self.client, self.name):
+            raise TypeError("Client already has attribute %s" % self.name)
+        setattr(self.client, self.name, self)
 
     def get_parameter_struct(self):
         if len(self.interface) == 1:
@@ -58,12 +58,13 @@ class RPCMethod(object):
     def call(self, **params):
         if len(params) == 1:
             _, params = params.popitem()
-        return self.protocol.request(self.name, params, self.response_expected)
+        return self.client.request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
         return self.call(*args, **kwargs)
 
-class RPCClient(twp.protocol.TWPClient):
+
+class RPC(twp.protocol.Protocol):
     protocol_id = 1
     message_types = [
         Request,
@@ -73,6 +74,38 @@ class RPCClient(twp.protocol.TWPClient):
     ]
     methods = []
 
+    def define_any_defined_by(self, field, reference_value):
+        if field.name == "parameters":
+            return self.get_params(reference_value)
+        elif field.name == "result":
+            return self.get_results(reference_value)
+
+    def _get_method(self, name):
+        method = None
+        for m in self.methods:
+            if m.name == name:
+                method = m
+                break
+        return method
+
+    def get_params(self, operation):
+        """Returns the param struct or value for the given operation name."""
+        operation = self._get_method(operation)
+        if not isinstance(operation, RPCMethod):
+            raise TWPError("No such method %s" % operation)
+        return operation.get_parameter_struct()
+
+    def get_results(self, request_id):
+        """Returns the result struct or value for the given request id."""
+        # FIXME This would not work for a server.
+        try:
+            req = self.connection.requests[request_id]
+        except KeyError:
+            raise TWPError("Invalid request id.")
+        operation = getattr(self.connection, req.values["operation"])
+        return operation.get_result_struct()
+
+class RPCClient(twp.protocol.TWPClient):
     def __init__(self, *args, **kwargs):
         super(RPCClient, self).__init__(*args, **kwargs)
         self.request_id = 0
@@ -80,30 +113,8 @@ class RPCClient(twp.protocol.TWPClient):
         self._init_methods()
 
     def _init_methods(self):
-        for method in self.methods:
+        for method in self.protocol.methods:
             method.visit(self)
-
-    def define_any_defined_by(self, field, reference_value):
-        if field.name == "parameters":
-            return self.get_params(reference_value)
-        elif field.name == "result":
-            return self.get_results(reference_value)
-
-    def get_params(self, operation):
-        """Returns the param struct or value for the given operation name."""
-        operation = getattr(self, operation)
-        if not isinstance(operation, RPCMethod):
-            raise TWPError("No such method %s" % operation)
-        return operation.get_parameter_struct()
-
-    def get_results(self, request_id):
-        """Returns the result struct or value for the given request id."""
-        try:
-            req = self.requests[request_id]
-        except KeyError:
-            raise TWPError("Invalid request id.")
-        operation = getattr(self, req.values["operation"])
-        return operation.get_result_struct()
 
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)
