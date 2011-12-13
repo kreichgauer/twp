@@ -1,4 +1,5 @@
 import sys
+import re
 from lepl import *
 from twp import log
 
@@ -117,7 +118,7 @@ class StubGenerator(object):
 				message_identifiers.append(msg.identifier[0])
 				self._generate_node(msg)
 		
-		self.start_class(node.identifier[0], "twp.protocol.TWPClient")
+		self.start_class(node.identifier[0], "twp.protocol.Protocol")
 		self.indent()
 		self.writeln("protocol_id = %d" % node.id[0])
 		self.writeln("message_types = [")
@@ -197,6 +198,10 @@ def cap_and_camelcase(value):
     c = camelcase()
     return "".join(next(c)(x) if x else '_' for x in value.split("_"))
 
+def strip_comments(input):
+	comments = r"\/\*.*\*\/"
+	input = re.sub(comments, "", input)
+	return input
 
 if __name__ == '__main__':
 	if len(sys.argv) == 3:
@@ -213,6 +218,7 @@ if __name__ == '__main__':
 		log.debug("Reading input file...")
 		idl = input.read()
 		log.debug("Parsing input...")
+		idl = strip_comments(idl)
 		ast = specification.parse(idl)
 		log.debug("Generating stub...")
 		gen = StubGenerator(ast, output)
