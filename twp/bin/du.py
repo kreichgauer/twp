@@ -17,12 +17,12 @@ def du_directory(client, directory):
     for file in files:
         reply = client.stat(directory=directory, file=file)
         stat = reply.values['result']
-        path = "/".join(directory) + file
+        path = "/".join(directory) + "/" + file
         print("%d\t%s" % (stat['size'], path))
-    
 
 def du(host, port, directory):
     client = tfs.TFS(host, port)
+    directory = directory.split("/")
     du_directory(client, directory)
 
 def usage():
