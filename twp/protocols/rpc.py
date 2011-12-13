@@ -70,23 +70,15 @@ class RPCClient(twp.protocol.TWPClient):
         result values."""
         raise NotImplementedError("No interface defined")
 
-    def unmarshal_any_defined_by(self, message, field, data):
-        self._unmarshal_method_parameters(message, field, data)
-
-    def _unmarshal_method_parameters(self, message, field, data):
+    def define_any_defined_by(self, field, reference_value):
         assert(field.name == "parameters")
-        assert(field.reference_name == "operation")
-        # Get the corresponding parameter list from `self.interfaces`
-        defined_by_field = message._fields[field.reference_name]
-        # Get RPCMethod instance
-        assert(defined_by_field.value) # Method name must have been given
-        operation = getattr(self, defined_by_field.value)
+        return self.get_params(reference_value)
+
+    def get_params(self, operation):
+        operation = getattr(self, operation)
         if not isinstance(RPCMethod, operation):
             raise TWPError("No such method %s" % operation)
-        # Unmarshal method parameters into Struct and put into `parameters` value
-        params_struct = operation.build_parameter_struct()
-        field.value = params_struct
-        return params_struct.unmarshal(data)
+        return operation.build_parameter_struct()
 
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)

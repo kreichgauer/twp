@@ -91,11 +91,10 @@ class TWPClient(object):
 				break
 		return messages
 
-	def unmarshal_any_defined_by(self, message, field, data):
+	def define_any_defined_by(self, field, reference_value):
 		raise NotImplementedError("No unmarshalling for AnyDefinedBy specified")
 
 
-# TODO Use a pattern for this.
 class MessageBuilder(object):
 	def __init__(self, protocol):
 		self.protocol = protocol

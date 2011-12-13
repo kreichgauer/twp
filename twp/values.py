@@ -5,15 +5,6 @@ import copy
 import struct
 from .error import TWPError
 
-# Global dict that contains a mapping of tag -> Value class
-value_types = {}
-def register_value_type(value_type, *args):
-	if not len(args):
-		args = [value_type.tag]
-	for tag in args:
-		value_types[tag] = value_type
-
-
 class Base(object):
 	# FIXME find a better class name
 	"""Abstract base class for TWP types."""
@@ -22,11 +13,6 @@ class Base(object):
 	def __init__(self, optional=False, name=None):
 		self._optional = optional
 		self.name = name
-
-	@property
-	def tag(self):
-		"""The types tag."""
-		raise NotImplementedError
 	
 	def _unmarshal(self, tag, value):
 		raise NotImplementedError
@@ -39,36 +25,28 @@ class Base(object):
 			raise TWPError("Invalid tag %d" % tag)
 		unmarshalled, length = self._unmarshal(tag, value)
 		length += 1
-		return length
+		return unmarshalled, length
 
 	def is_optional(self):
 		return self._optional
 
-	def is_empty(self):
-		"""Implement to return True iff this field should not be marshalled, 
-		e.g. because no meaningful value is present."""
-		raise NotImplementedError
-
-	def _marshal_tag(self):
+	def _marshal_tag(self, value):
 		"""Returns a byte string containing the tag value."""
 		return bytes([self.tag])
 
-	def _marshal_value(self):
+	def _marshal_value(self, value):
 		"""Implement to return a byte string with the marshalled value."""
 		raise NotImplementedError
 
-	def _marshal_no_value(self):
-		return NoValue().marshal()
-
-	def marshal(self):
+	def marshal(self, value):
 		"""Concats `_marshal_tag()` and `_marshal_value()` if `is_empty()` 
 		returns False. Otherwise, a NoValue is marshalled if the instace is
 		optional, a ValueError is raised else."""
-		if self.is_empty():
+		if value is None:
 			if not self.is_optional():
 				raise ValueError("Non-optional empty field %s." % self.name)
-			return self._marshal_no_value()
-		return self._marshal_tag() + self._marshal_value()
+			return NoValue().marshal()
+		return self._marshal_tag(value) + self._marshal_value(value)
 
 	@classmethod
 	def handles_tag(cls, tag):
@@ -85,70 +63,19 @@ class NoValueBase(Base):
 	def _unmarshal(self, tag, value):
 		return None, 0
 
-	def _marshal_value(self):
-		return b""
+	def marshal(self):
+		return bytes([self.tag])
 
 
 class EndOfContent(NoValueBase):
 	tag = 0
-register_value_type(EndOfContent)
+
 
 class NoValue(NoValueBase):
 	tag = 1
-register_value_type(NoValue)
 
 
-class _Complex(Base):
-	def __new__(cls, *args, **kwargs):
-		instance = super(_Complex, cls).__new__(cls)
-		# Copy all the fields to be per instance, even if defined per class
-		# This is a strange way of achieving this. Better have types.Foo() 
-		# return a class/factory instead and create the instances in __new__
-		instance._fields = copy.deepcopy(cls._fields)
-		return instance
-
-	def __init__(self, *args, optional=False, name=None):
-		super(_Complex, self).__init__(optional=optional, name=name)
-		self.update_fields(*args)
-
-	def get_fields(self):
-		return self._fields
-
-	def _unmarshal(self, tag, value):
-		total_length = 0
-		# Marhal value field for field
-		for field in self.get_fields():
-			if not len(value):
-				# Value too short, wait for more input
-				raise ValueError()
-			length = field.unmarshal(value)
-			value = value[length:]
-			total_length += length
-		return None, total_length
-
-	def update_fields(self, *args):
-		fields = self.get_fields()
-		if len(args) > len(fields):
-			raise ValueError("Too many arguments")
-		for field, value in zip(fields, args):
-			field.value = value
-
-	def _marshal_value(self):
-		marshalled_fields = [field.marshal() for field in self.get_fields()]
-		marshalled = b"".join(marshalled_fields)
-		# TODO extensions?
-		marshalled += EndOfContent().marshal()
-		return marshalled
-
-	def is_empty(self):
-		# Return True iff one non-optional field is empty
-		for field in self.get_fields():
-			if not field.is_optional() and field.is_empty():
-				return True
-		return False
-
-
-class _StructType(type):
+class _ComplexType(type):
 	"""Metaclass for Complex classes with fields."""
 	@classmethod
 	def __prepare__(metacls, name, bases, **kwargs):
@@ -164,7 +91,7 @@ class _StructType(type):
 		for k, v in attrs.items():
 			if isinstance(v, Base):
 				if metacls.bases_have_attr(bases, k):
-					raise ValueError("%s.%s overrides a member of a base class."
+					raise TypeError("%s.%s overrides a member of a base class."
 						% (cls.__name__, k))
 				cls._fields[k] = v
 				v.name = v.name or k
@@ -178,33 +105,54 @@ class _StructType(type):
 		return False
 
 
-class _Struct(_Complex, metaclass=_StructType):
-	def get_fields(self):
-		return self._fields.values()
+class _Complex(Base, metaclass=_ComplexType):
+	def _unmarshal(self, tag, value):
+		unmarshalled = {}
+		total_length = 0
+		# Marhal value field for field
+		for field in self._fields.values():
+			if not len(value):
+				# Value too short, wait for more input
+				raise ValueError()
+			val, length = self._unmarshal_field(field, value, unmarshalled)
+			value = value[length:]
+			total_length += length
+		EndOfContent().unmarshal(value)
+		value = value[1:]
+		total_length += 1
+		return unmarshalled, total_length
 
-	def __setattr__(self, k, v):
-		field = self._fields.get(k)
-		if not field is None:
-			field.value = v
-		else:
-			super(_Complex, self).__setattr__(k, v)
-	
-	def __getattr__(self, k):
-		field = self._fields.get(k)
-		if field is None:
-			raise AttributeError()
-		return field.value
+	def _unmarshal_field(self, field, value, into):
+		# prev_values is the result of `unmarshal` so far. This all exists, so
+		# Message can override it. Ugly as shit.
+		unmarshalled, length = field.unmarshal(value)
+		into[field.name] = unmarshalled
+		return unmarshalled, length
+
+	def _marshal_value(self, values):
+		if len(values) != len(self._fields):
+			raise TypeError("Wrong number of values (expected %d, got %d" %
+				(len(values), len(self._fields)))
+		marshalled_fields = []
+		for name, field in self._fields.items():
+			self._marshal_field(field, values, marshalled_fields)
+		marshalled_fields.append(EndOfContent().marshal())
+		marshalled = b"".join(marshalled_fields)
+		return marshalled
+
+	def _marshal_field(self, field, values, into):
+		value = values.get(field.name)
+		marshalled = field.marshal(value)
+		into.append(marshalled)
+		return marshalled
 
 
-class Struct(_Struct):
+class Struct(_Complex):
 	tag = 2
 
 	@staticmethod
 	def with_fields(*args, **kwargs):
 		"""Returns an instance of Struct with the fields given in kwargs."""
-		# This is needed, because Structs can sometimes occur without having a 
-		# template class that defines all the fields. Maybe Message this is 
-		# needed for Message as well.
 		struct = Struct()
 		for field in args:
 			assert(field.name)
@@ -220,17 +168,35 @@ class Struct(_Struct):
 		field.name = field.name or name
 
 
-class Sequence(_Complex):
+class Sequence(Base): # Should be Complex, but isn't
 	tag = 3
-	def __getitem__(self, idx):
-		return self._fields[idx].value
+	type = None
 
-	def __setitem__(self, idx, value):
-		self._fields[idx].value = value
-register_value_type(Sequence)
+	def _marshal_value(self, values):
+		marshalled = [self.type.marshal(value) for value in values]
+		marshalled.append(EndOfContent().marshal())
+		return b"".join(marshalled)
+
+	def _unmarshal(self, tag, value):
+		unmarshalled = []
+		total_length = 0
+		while value:
+			if value[0] == EndOfContent.tag:
+				length += 1
+				return unmarshalled, total_length
+			val, length = self.type.unmarshal(value)
+			unmarshalled.append(val)
+			value = value[length:]
+			total_length += length
+		# Need more bytes
+		raise ValueError()
 
 
-class Message(_Struct):
+class Message(_Complex):
+	def __init__(self, **values):
+		self.protocol = None
+		self.values = values
+
 	@property
 	def tag(self):
 		"""The Message's tag. This equals 4 plus the id. Raises a 
@@ -247,31 +213,32 @@ class Message(_Struct):
 		unmarshalling a field with the given tag."""
 		return tag == cls.id + 4
 
-	@property
-	def _eoc(self):
-		if not hasattr(self, '__eoc'):
-			self.__eoc = EndOfContent()
-		return self.__eoc
+	def marshal_message(self, protocol):
+		# Set this, so we can ask it for the definition of AnyDefinedBy fields
+		# Yes, I know this stinks.
+		self.protocol = protocol
+		marshalled = self.marshal(self.values)
+		self.protocol = None
+		return marshalled
 
-	def get_fields(self):
-		fields = list(super(Message, self).get_fields())
-		fields.append(self._eoc)
-		return fields
+	def _marshal_field(self, field, value, into):
+		# Have Protocol resolve AnyDefinedBy fields
+		if isinstance(field, AnyDefinedBy):
+			reference_value = into[field.reference_name]
+			field = self.protocol.define_any_defined_by(field, reference_value)
+		return super(Message, self)._marshal_field(field, value, into)
 
-	# FIXME code duplication w/ Struct
-	def __setattr__(self, k, v):
-		field = self._fields.get(k)
-		if not field is None:
-			field.value = v
-		else:
-			super(_Complex, self).__setattr__(k, v)
-	
-	def __getattr__(self, k):
-		field = self._fields.get(k)
-		if field is None:
-			raise AttributeError()
-		return field.value
-register_value_type(Message, range(4,12))
+	def unmarshal_message(self, data, protocol):
+		self.protocol = protocol
+		unmarshalled, length = self.unmarshal(data)
+		self.values = unmarshalled
+		self.protocol = None
+
+	def _unmarshal_field(self, field, value, into):
+		if isinstance(field, AnyDefinedBy):
+			reference_value = into[field.reference_name]
+			field = self.protocol.define_any_defined_by(field, reference_value)
+		return super(Message, self)._unmarshal_field(field, value, into)
 
 
 class Union(_Complex):
@@ -294,28 +261,11 @@ class RegisteredExtension(_Complex):
 		id = self._marshal_registered_id()
 		fields = super(RegisteredExtension, self)._marshal_value()
 		return id + fields
-register_value_type(RegisteredExtension)
 
 
 class Primitive(Base):
 	"""Abstract class for primitive types, i.e. types with a scalar value."""
-	def __init__(self, value=None, **kwargs):
-		super(Primitive, self).__init__(**kwargs)
-		self.value = value
-
-	def is_empty(self):
-		return self.value is None
-
-	def unmarshal(self, data):
-		# FIXME handle NoValue
-		tag = data[0]
-		value = data[1:]
-		if not self.__class__.handles_tag(tag):
-			raise TWPError("Invalid tag %d" % tag)
-		unmarshalled, length = self._unmarshal(tag, value)
-		self.value = unmarshalled
-		length += 1
-		return length
+	pass
 
 class Int(Primitive):
 	_formats = {
@@ -336,24 +286,23 @@ class Int(Primitive):
 		unmarshalled = self._unpack_with_format(format, unmarshalled)
 		return unmarshalled, struct_length
 
-	def _pack_with_format(self, format):
-		return struct.pack(format, self.value)
+	def _pack_with_format(self, format, value):
+		return struct.pack(format, value)
 
-	def marshal(self):
+	def marshal(self, value):
 		for tag, (length, format) in self._formats.items():
 			try:
-				value = self._pack_with_format(format)
+				value = self._pack_with_format(format, value)
 				tag = bytes([tag])
 				return b"".join([tag, value])
 			except struct.error:
 				pass
-		raise ValueError("Integer value out of bounds")	
+		raise TypeError("Integer value out of bounds")	
 		
 	@classmethod	
 	def handles_tag(cls, tag):
 		all_tags = [t for t, (l, f) in cls._formats.items()]
 		return tag in all_tags
-register_value_type(Int, 13, 14)
 
 
 class String(Primitive):
@@ -393,36 +342,36 @@ class String(Primitive):
 		length += 4
 		return unmarshalled, length
 
-	def encoded_value(self):
-		return self.value.encode('utf-8')
+	def encoded_value(self, value):
+		return value.encode('utf-8')
 
-	@property
-	def tag(self):
-		if self.is_long_string():
-			return self.LONG_TAG
+	def _marshal_tag(self, value):
+		if self.is_long_string(value):
+			tag = self.LONG_TAG
 		else:
-			return self.SHORT_TAG + len(self.encoded_value())
+			tag = self.SHORT_TAG + len(self.encoded_value(value))
+		return bytes([tag])
 
-	def is_long_string(self):
-		return len(self.encoded_value()) > 109
+	def is_long_string(self, value):
+		return len(self.encoded_value(value)) > 109
 
 	@classmethod
 	def handles_tag(cls, tag):
 		return tag in range(17,128)
 
-	def _marshal_value(self):
-		if self.is_long_string():
-			return self._marshal_long_value()
+	def _marshal_value(self, value):
+		if self.is_long_string(value):
+			return self._marshal_long_value(value)
 		else:
-			return self.encoded_value()
+			return self.encoded_value(value)
 
-	def _marshal_long_value(self):
-		value = self.encoded_value()
+	def _marshal_long_value(self, value):
+		value = self.encoded_value(value)
 		if len(value) > self.MAX_LENGTH:
 			raise ValueError("Value too long for long string encoding.")
 		length = struct.pack('>I', len(value))
 		return length + value
-register_value_type(String, range(17, 128))
+
 
 class Binary(Primitive):
 	pass
@@ -442,7 +391,7 @@ class AnyDefinedBy(Primitive):
 		return self.value.marshal()
 
 	def unmarshal(self, data):
-		# FIXME Damn, this is ugly
+		# Shiiit
 		tag = data[0]
 		value_type = value_types.get(tag)
 		if value_type is None:
