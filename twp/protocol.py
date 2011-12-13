@@ -70,6 +70,7 @@ class TWPClient(object):
 		"""Recv messages until all available data can be parsed into messages
 		or a timeout occurs. Return the list of parsed messages."""
 		# TODO Optional parameter msg_count=1, to guarantee result length?
+		# FIXME this needs to be re-written
 		messages = []
 		while True:
 			# Recv data
@@ -83,17 +84,14 @@ class TWPClient(object):
 				raise TWPError("Remote side hung up")
 			log.debug("Recvd data: %s" % data)
 			# Pass data to message builder.
-			while len(data):
-				message, length = self._builder.build_message(data)
-				if message:
-					messages.append(message)
+			message, length = self._builder.build_message(data)
+			if message:
+				messages.append(message)
 				data = data[length:]
-			# TODO this looks a bit ugly
-			if not message:
+				break
+			else:
 				# Last data chunk was a partial message, continue recv'ign
 				continue
-			else:
-				break
 		return messages
 
 	def define_any_defined_by(self, field, reference_value):
@@ -124,7 +122,11 @@ class MessageBuilder(object):
 		self.data += data
 		if not self.message:
 			self._create_message()
-		self._unmarshal_values()
+		try:
+			self._unmarshal_values()
+		except ValueError:
+			# We need more bytes
+			return None, None
 		result = self.message, self.processed
 		self.reset()
 		return result
@@ -141,12 +143,9 @@ class MessageBuilder(object):
 		self.message = message
 
 	def _unmarshal_values(self):
-		try:
-			values, length = self.message.unmarshal_message(self.data, self.protocol)
-			self._did_process(length)
-		except ValueError:
-			# We need more bytes
-			pass
+		log.info("Trying to unmarshal %r" % self.data)
+		values, length = self.message.unmarshal_message(self.data, self.protocol)
+		self._did_process(length)
 
 	def _did_process(self, length):
 		self.data = self.data[length:]
