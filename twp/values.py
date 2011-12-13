@@ -390,17 +390,39 @@ class String(Primitive):
 
 
 class Binary(Primitive):
-	def _unmarshal_value(self, tag, value):
-		length = value[0:]
+	SHORT_TAG = 15
+	LONG_TAG = 16
+
+	@classmethod
+	def handles_tag(cls, tag):
+		return tag in [cls.SHORT_TAG, cls.LONG_TAG]
+
+	def _is_short(self, length):
+		return length < 256
+
+	def _unmarshal(self, tag, value):
+		if tag == self.SHORT_TAG:
+			length = struct.unpack("@b", value[:1])[0]
+		else:
+			length = struct.unpack("@I", value[:4])[0]
 		if len(value) > length:
 			# Not enough bytes
 			raise ValueError()
 		unmarshalled = value[:length]
 		return unmarshalled, length
 
+	def _marshal_tag(self, value):
+		return b""
+
 	def _marshal_value(self, value):
 		length = len(value)
-		marshalled = bytes([length]) + bytes(value)
+		if self._is_short(length):
+			tag = bytes([self.SHORT_TAG])
+			length = struct.pack("@b", length)
+		else:
+			tag = bytes([self.LONG_TAG])
+			length = struct.pack("@I", length)
+		marshalled = tag + length + bytes(value) #sic!
 		return marshalled
 
 

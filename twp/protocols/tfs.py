@@ -75,3 +75,12 @@ class TFS(twp.protocols.rpc.RPC):
 
 class TFSClient(twp.protocols.rpc.RPCClient):
     protocol_class = TFS
+
+def pack_ip(ip):
+    import socket
+    ip = socket.inet_pton(socket.AF_INET, ip)
+    return ip
+
+def pack_ip6(ip):
+    import socket
+    return socket.inet_pton(socket.AF_INET6, ip)

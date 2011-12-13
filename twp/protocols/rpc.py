@@ -105,6 +105,7 @@ class RPC(twp.protocol.Protocol):
         operation = getattr(self.connection, req.values["operation"])
         return operation.get_result_struct()
 
+
 class RPCClient(twp.protocol.TWPClient):
     def __init__(self, *args, **kwargs):
         super(RPCClient, self).__init__(*args, **kwargs)
