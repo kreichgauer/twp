@@ -190,7 +190,7 @@ class Sequence(Base): # Should be Complex, but isn't
 		total_length = 0
 		while value:
 			if value[0] == EndOfContent.tag:
-				length += 1
+				total_length += 1
 				return unmarshalled, total_length
 			val, length = self.type.unmarshal(value)
 			unmarshalled.append(val)

@@ -40,7 +40,12 @@ class TWPClient(object):
 
 	def _send(self, data):
 		data = bytes(data)
-		self.socket.sendall(data)
+		pos = 0
+		while pos < len(data):
+			length = self.socket.send(data[pos:])
+			if length < 0:
+				raise TWPError("Remote side hung up.")
+			pos += length
 		log.debug('Sent data: %r' % data)
 
 	def send_message(self, msg):
@@ -75,7 +80,7 @@ class TWPClient(object):
 				break
 			if not data:
 				log.warn("Remote side hung up")
-				# FIXME raise
+				raise TWPError("Remote side hung up")
 			log.debug("Recvd data: %s" % data)
 			# Pass data to message builder.
 			while len(data):
@@ -92,6 +97,9 @@ class TWPClient(object):
 		return messages
 
 	def define_any_defined_by(self, field, reference_value):
+		"""During marshalling/unmarshalling, this can get a field of type
+		or `AnyDefinedBy` and the value of its reference field and has to return
+		an instance to marshal that field's value into."""
 		raise NotImplementedError("No unmarshalling for AnyDefinedBy specified")
 
 

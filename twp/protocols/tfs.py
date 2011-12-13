@@ -50,16 +50,16 @@ class TFS(twp.protocols.rpc.RPCClient):
             twp.protocols.rpc.RPCMethod("stat", (
                     Path(name="directory"), 
                     twp.values.String(name="file")
-                ), ListResult()),
+                ), StatResult()),
             twp.protocols.rpc.RPCMethod("mkdir", (
                     Path(name="directory"),
-                ), ListResult()),
+                ), twp.values.NoValue()),
             twp.protocols.rpc.RPCMethod("rmdir", (
                     Path(name="directory"),
-                ), ListResult()),
+                ), twp.values.NoValue()),
             twp.protocols.rpc.RPCMethod("remove", (
                     Path(name="directory"),
                     twp.values.String(name="file")
-                ), ListResult()),
+                ), twp.values.NoValue()),
         ]
         super(TFS, self).__init__(*args, **kwargs)

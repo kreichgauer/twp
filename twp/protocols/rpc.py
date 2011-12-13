@@ -47,16 +47,21 @@ class RPCMethod(object):
         params_struct = twp.values.Struct.with_fields(name="parameters", *params)
         return params_struct
 
-    def get_result_value(self):
-        return copy.deepcopy(self.result)
+    def get_result_struct(self):
+        result = copy.deepcopy(self.result)
+        if isinstance(result, twp.values.Base) or len(result) == 1:
+            result.name = "result"
+        else:
+            result = twp.values.Struct.with_fields(name="result", *result)
+        return result
 
     def call(self, **params):
         if len(params) == 1:
             _, params = params.popitem()
-        self.protocol.request(self.name, params, self.response_expected)
+        return self.protocol.request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
-        self.call(*args, **kwargs)
+        return self.call(*args, **kwargs)
 
 class RPCClient(twp.protocol.TWPClient):
     protocol_id = 1
@@ -71,6 +76,7 @@ class RPCClient(twp.protocol.TWPClient):
     def __init__(self, *args, **kwargs):
         super(RPCClient, self).__init__(*args, **kwargs)
         self.request_id = 0
+        self.requests = []
         self._init_methods()
 
     def _init_methods(self):
@@ -78,23 +84,38 @@ class RPCClient(twp.protocol.TWPClient):
             method.visit(self)
 
     def define_any_defined_by(self, field, reference_value):
-        assert(field.name == "parameters")
-        return self.get_params(reference_value)
+        if field.name == "parameters":
+            return self.get_params(reference_value)
+        elif field.name == "result":
+            return self.get_results(reference_value)
 
     def get_params(self, operation):
+        """Returns the param struct or value for the given operation name."""
         operation = getattr(self, operation)
         if not isinstance(operation, RPCMethod):
             raise TWPError("No such method %s" % operation)
         return operation.get_parameter_struct()
 
+    def get_results(self, request_id):
+        """Returns the result struct or value for the given request id."""
+        try:
+            req = self.requests[request_id]
+        except KeyError:
+            raise TWPError("Invalid request id.")
+        operation = getattr(self, req.values["operation"])
+        return operation.get_result_struct()
+
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)
         self.send_message(request)
+        # Store request for later reference
+        self.requests.append(request)
+        assert(len(self.requests) == self.request_id)
         reply = None
         if response_expected:
             # FIXME check request_id
             reply = self.recv_messages()[0]
-            if not isinstance(msg, Reply):
+            if not isinstance(reply, Reply):
                 raise TWPError("Reply expected")
         return reply
 
