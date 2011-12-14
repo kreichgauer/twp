@@ -1,9 +1,9 @@
 import socket
-import socketserver
+import asyncore
 from twp import log, values
 from twp.error import TWPError
 
-SOCKET_READSIZE = 1024
+BUFSIZE = 1024
 TWP_MAGIC = b"TWP3\n"
 
 class Protocol(object):
@@ -35,14 +35,17 @@ class Protocol(object):
 
 
 class Connection(object):
+	def __init__(self):
+		self.init_protocol()
+		self.buffer = b""
+
 	def init_protocol(self):
-		"""Derived classes have to call this to initialize the protocol."""
 		self.protocol = self.protocol_class()
 		self.protocol.init_connection(self)
 
 	def send_message(self, msg):
 		data = msg.marshal_message(self.protocol)
-		self.send_raw(data)
+		self.send(data)
 
 	def recv_messages(self):
 		"""Recv messages until all available data can be parsed into messages
@@ -50,107 +53,126 @@ class Connection(object):
 		# TODO Optional parameter msg_count=1, to guarantee result length?
 		# FIXME this needs to be re-written
 		messages = []
-		while True:
-			# Recv data
+		while not len(messages):
 			try:
-				data = self.recv_raw(SOCKET_READSIZE)
+				self.recv()
 			except socket.timeout:
 				log.debug("socket timeout")
 				break
-			if not data:
-				log.warn("Remote side hung up")
-			log.debug("Recvd data: %s" % data)
+			messages.extend(self.read_messages())
+		return messages
+
+	def read_messages(self):
+		messages = []
+		while self.buffer:
 			# Pass data to message builder.
-			message, length = self.protocol._builder.build_message(data)
+			message, length = self.protocol._builder.build_message(self.buffer)
 			if message:
 				messages.append(message)
-				data = data[length:]
-				break
-			else:
-				# Last data chunk was a partial message, continue recv'ign
+				self.buffer = self.buffer[length:]
+				# Unmarshal more or exit of loop
 				continue
+			else:
+				# Last data chunk was a partial message
+				break
 		return messages
 
 
 class TWPClient(Connection):
-	def __init__(self, host='localhost', port=5000, force_ip_v6=False):
-		self._init_socket(host, port, force_ip_v6=False)
-		self.init_protocol()
+	def __init__(self, host='localhost', port=5000):
+		Connection.__init__(self)
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.connect(host, port)
 		self._init_session()
 
+	def create_socket(self, family, type):
+		sock = socket.socket(family, type)
+		sock.setblocking(1)
+		self.socket = sock
+
+	def connect(self, host, port):
+		self.socket.connect((host, port))
+
 	def _init_session(self):
-		self.send_raw(TWP_MAGIC)
-		protocol_id = values.Int().marshal(self.protocol_id)
-		self.send_raw(protocol_id)
+		protocol_id = values.Int().marshal(self.protocol.protocol_id)
+		self.send(TWP_MAGIC + protocol_id)
 
-	def _init_socket(self, host, port, force_ip_v6=False):
-		socktype = socket.SOCK_STREAM
-		af = socket.AF_INET6 if force_ip_v6 else socket.AF_UNSPEC
-		addrinfo = socket.getaddrinfo(host, port, af, socktype)
-		for af, socktype, proto, canonname, saddr in addrinfo:
-			try:
-				self.socket = socket.socket(af, socktype, proto)
-			except socket.error as e:
-				self.socket = None
-				continue
-			try:
-				self.socket.connect(saddr)
-			except socket.error as e:
-				self.socket.close()
-				self.socket = None
-				continue
-			break
-		if self.socket is None:
-			raise ValueError("Invalid address")
-
-	def send_raw(self, data):
+	def send(self, data):
 		data = bytes(data)
-		pos = 0
-		while pos < len(data):
-			length = self.socket.send(data[pos:])
-			if length < 0:
-				raise TWPError("Remote side hung up.")
-			pos += length
+		self.socket.sendall(data)
 		log.debug('Sent data: %r' % data)
 
-	def recv_raw(self, size):
-		return self.socket.recv(size)
+	def recv(self, size=BUFSIZE):
+		data = self.socket.recv(size)
+		print("Recvd: %s" % data)
+		self.buffer += data
 
 
-class TWPConsumer(socketserver.BaseRequestHandler, Connection):
-	def setup(self):
-		self.init_protocol()
+class TWPConsumer(asyncore.dispatcher_with_send, Connection):
+	def __init__(self):
+		Connection.__init__(self)
 
-	def handle(self):
-		try:
-			if not self.recv_twp_magic():
-				log.warn("Invalid TWP magic")
-				return
-			while True:
-				messages = self.recv_messages()
-				if not len(messages):
-					break
-				for message in messages:
-					self.on_message(message)
-		except Exception as e:
-			log.error("Uncaught exception %s" % e)
+	def handle_request(self):
+		self.buffer += self.request.recv(SOCKET_READSIZE)
+		if not self.has_read_magic and not self.read_twp_magic():
+			log.warn("Invalid TWP magic")
+			self.close()
+			return
+		#if not self.has_read_protocol_id and not self.recv_protocol_id():
+		# 	self.close()
+		#	return
+		messages = self.read_messages()
+		for message in messages:
+			self.on_message(message)
 
 	def send_raw(self, data):
 		return self.request.send(data)
 
 	def recv_raw(self, size):
-		return self.request.recv(size)
+		return self.recv(size)
 
-	def recv_twp_magic(self):
-		magic = b""
-		while len(magic) < len(TWP_MAGIC):
-			data = self.request.recv(len(TWP_MAGIC))
-			magic += data
+	def consume(self, size):
+		r = self.data[:size]
+		self.data = self.data[size:]
+		return r
+
+	def read_twp_magic(self):
+		if len(self.data) > len(TWP_MAGIC):
+			return False
+		magic = self.consume(len(TWP_MAGIC))
+		self.has_read_magic = True
 		return magic == TWP_MAGIC
+
+	def recv_protocol_id(self):
+		data = b""
+		while len(data) < 2:
+			data += self.request.recv(2)
+		id = values.Int()
+		id, _ = id.unmarshal(data)
+		eq = id == self.protocol.protocol_id
+		if not eq:
+			log.warn("Invalid protocol id %d (expected %d)" % (id, 
+				self.protocol.protocol_id))
+		return eq
 
 	def on_message(self, message):
 		log.debug("Recvd message: %s" % message)
 
+
+class TWPServer(asyncore.dispatcher):
+	handler_class = None
+	def __init__(self, host, port):
+		asyncore.dispatcher.__init__(self)
+		self.self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.set_reuse_addr()
+		self.bind((host, port))
+		self.listen()
+	
+	def handle_accept(self):
+		pair = self.handle_accept()
+		if not pair is None:
+			sock, addr = pair
+			handler = handler_class(sock)
 
 
 class MessageBuilder(object):
