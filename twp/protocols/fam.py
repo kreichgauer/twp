@@ -39,6 +39,12 @@ class FAM(twp.protocol.Protocol):
         StopExecuting,
     ]
 
+class FAMClient(twp.protocol.TWPClient):
+    protocol_class = FAM
+
 class FAMConsumer(twp.protocol.TWPConsumer):
     protocol_class = FAM
     pass
+
+class FAMServer(twp.protocol.TWPServer):
+    handler_class = FAMConsumer

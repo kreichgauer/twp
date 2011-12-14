@@ -45,7 +45,7 @@ class Connection(object):
 
 	def send_message(self, msg):
 		data = msg.marshal_message(self.protocol)
-		self.send(data)
+		self.write(data)
 
 	def recv_messages(self):
 		"""Recv messages until all available data can be parsed into messages
@@ -55,7 +55,7 @@ class Connection(object):
 		messages = []
 		while not len(messages):
 			try:
-				self.recv()
+				self.read()
 			except socket.timeout:
 				log.debug("socket timeout")
 				break
@@ -95,65 +95,74 @@ class TWPClient(Connection):
 
 	def _init_session(self):
 		protocol_id = values.Int().marshal(self.protocol.protocol_id)
-		self.send(TWP_MAGIC + protocol_id)
+		self.write(TWP_MAGIC + protocol_id)
 
-	def send(self, data):
+	def write(self, data):
 		data = bytes(data)
 		self.socket.sendall(data)
 		log.debug('Sent data: %r' % data)
 
-	def recv(self, size=BUFSIZE):
+	def read(self, size=BUFSIZE):
 		data = self.socket.recv(size)
 		log.debug("Recvd: %s" % data)
 		self.buffer += data
 
+	def close(self):
+		self.socket.close()
+
 
 class TWPConsumer(asyncore.dispatcher_with_send, Connection):
-	def __init__(self):
+	def __init__(self, sock):
+		asyncore.dispatcher_with_send.__init__(self, sock)
 		Connection.__init__(self)
+		self.buffer = b""
+		self.has_read_magic = False
+		self.has_read_protocol_id = False
 
-	def handle_request(self):
-		self.buffer += self.request.recv(SOCKET_READSIZE)
-		if not self.has_read_magic and not self.read_twp_magic():
-			log.warn("Invalid TWP magic")
-			self.close()
+	def handle_read(self):
+		print("handle read")
+		self.read()
+		if not self.has_read_magic:
+			self.read_twp_magic()
 			return
-		#if not self.has_read_protocol_id and not self.recv_protocol_id():
-		# 	self.close()
-		#	return
+		if not self.has_read_protocol_id:
+			self.read_protocol_id()
+			return
 		messages = self.read_messages()
 		for message in messages:
 			self.on_message(message)
 
-	def send_raw(self, data):
-		return self.request.send(data)
+	def write(self, data):
+		self.send(data)
 
-	def recv_raw(self, size):
-		return self.recv(size)
-
-	def consume(self, size):
-		r = self.data[:size]
-		self.data = self.data[size:]
-		return r
+	def read(self, size=BUFSIZE):
+		data = self.recv(size)
+		log.debug("Recvd: %s" % data)
+		self.buffer += data
 
 	def read_twp_magic(self):
-		if len(self.data) > len(TWP_MAGIC):
-			return False
-		magic = self.consume(len(TWP_MAGIC))
+		magic_length = len(TWP_MAGIC)
+		if len(self.buffer) < magic_length:
+			return
+		magic = self.buffer[:magic_length]
+		if magic != TWP_MAGIC:
+			log.warn("Wrong TWP magic")
+			self.close()
+			return
+		self.buffer = self.buffer[magic_length:]
 		self.has_read_magic = True
-		return magic == TWP_MAGIC
 
-	def recv_protocol_id(self):
-		data = b""
-		while len(data) < 2:
-			data += self.request.recv(2)
+	def read_protocol_id(self):
+		if len(self.buffer) < 2:
+			return
 		id = values.Int()
-		id, _ = id.unmarshal(data)
-		eq = id == self.protocol.protocol_id
-		if not eq:
-			log.warn("Invalid protocol id %d (expected %d)" % (id, 
-				self.protocol.protocol_id))
-		return eq
+		id, _ = id.unmarshal(self.buffer[:2])
+		if id != self.protocol.protocol_id:
+			log.warn("Wrong protocol id %s" % id)
+			self.close()
+			return
+		self.buffer = self.buffer[2:]
+		self.has_read_protocol_id = True
 
 	def on_message(self, message):
 		log.debug("Recvd message: %s" % message)
@@ -163,16 +172,19 @@ class TWPServer(asyncore.dispatcher):
 	handler_class = None
 	def __init__(self, host, port):
 		asyncore.dispatcher.__init__(self)
-		self.self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.set_reuse_addr()
 		self.bind((host, port))
-		self.listen()
+		self.listen(5)
 	
 	def handle_accept(self):
-		pair = self.handle_accept()
+		pair = self.accept()
 		if not pair is None:
 			sock, addr = pair
-			handler = handler_class(sock)
+			handler = self.handler_class(sock)
+
+	def serve_forever(self):
+		asyncore.loop()
 
 
 class MessageBuilder(object):
