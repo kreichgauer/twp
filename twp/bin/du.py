@@ -5,25 +5,26 @@ from twp.protocols import tfs
 
 twp.log.setLevel(logging.WARN)
 
-def du_directory(client, directory):
-    reply = client.listdir(directory=directory)
+def du_directory(obj, directory):
+    reply = obj.listdir(directory=directory)
     dirs = reply.values['result']['directories']
     files = reply.values['result']['files']
     for subdir in dirs:
         dir = []
         dir.extend(directory)
         dir.append(subdir)
-        du_directory(client, dir)
+        du_directory(obj, dir)
     for file in files:
-        reply = client.stat(directory=directory, file=file)
+        reply = obj.stat(directory=directory, file=file)
         stat = reply.values['result']
         path = "/".join(directory) + "/" + file
         print("%d\t%s" % (stat['size'], path))
 
 def du(host, port, directory):
     client = tfs.TFSClient(host, port)
+    facade = client.get_facade()
     directory = directory.split("/")
-    du_directory(client, directory)
+    du_directory(facade, directory)
 
 def usage():
     print("Usage: %s <host> <port> <directory>" % sys.argv[0])

@@ -33,11 +33,11 @@ class RPCMethod(object):
         self.result = result
         self.response_expected = response_expected
     
-    def visit(self, client):
-        self.client = client
-        if hasattr(self.client, self.name):
-            raise TypeError("Client already has attribute %s" % self.name)
-        setattr(self.client, self.name, self)
+    def visit(self, facade):
+        self.facade = facade
+        if hasattr(self.facade, self.name):
+            raise TypeError("Facade already has attribute %s" % self.name)
+        setattr(self.facade, self.name, self)
 
     def get_parameter_struct(self):
         if len(self.interface) == 1:
@@ -58,7 +58,7 @@ class RPCMethod(object):
     def call(self, **params):
         if len(params) == 1:
             _, params = params.popitem()
-        return self.client.request(self.name, params, self.response_expected)
+        return self.facade._request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
         return self.call(*args, **kwargs)
@@ -102,7 +102,7 @@ class RPC(twp.protocol.Protocol):
             req = self.connection.requests[request_id]
         except KeyError:
             raise TWPError("Invalid request id.")
-        operation = getattr(self.connection, req.values["operation"])
+        operation = self._get_method(req.values["operation"])
         return operation.get_result_struct()
 
 
@@ -111,11 +111,6 @@ class RPCClient(twp.protocol.TWPClient):
         super(RPCClient, self).__init__(*args, **kwargs)
         self.request_id = 0
         self.requests = []
-        self._init_methods()
-
-    def _init_methods(self):
-        for method in self.protocol.methods:
-            method.visit(self)
 
     def request(self, operation, parameters, response_expected=True):
         request = self._build_request(response_expected, operation, parameters)
@@ -142,3 +137,19 @@ class RPCClient(twp.protocol.TWPClient):
         id = self.request_id
         self.request_id += 1
         return id
+
+    def get_facade(self):
+        return RPCFacade(self, self.protocol.methods)
+
+
+class RPCFacade(object):
+    def __init__(self, client, methods):
+        self.client = client
+        self._init_methods(methods)
+
+    def _init_methods(self, methods):
+        for method in methods:
+            method.visit(self)
+
+    def _request(self, *args, **kwargs):
+        return self.client.request(*args, **kwargs)
