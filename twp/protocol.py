@@ -68,8 +68,8 @@ class Connection(object):
 			# Pass data to message builder.
 			message, length = self.protocol._builder.build_message(self.buffer)
 			if message:
-				messages.append(message)
 				self.buffer = self.buffer[length:]
+				messages.append(message)
 				# Unmarshal more or exit of loop
 				continue
 			else:
@@ -104,7 +104,7 @@ class TWPClient(Connection):
 
 	def recv(self, size=BUFSIZE):
 		data = self.socket.recv(size)
-		print("Recvd: %s" % data)
+		log.debug("Recvd: %s" % data)
 		self.buffer += data
 
 
@@ -182,10 +182,10 @@ class MessageBuilder(object):
 
 	def reset(self):
 		"""Called when build_message actually returns a message."""
-		# Incoming data
-		self.data = b""
 		# Number of processed bytes
 		self.processed = 0
+		# Incoming data
+		self.data = b""
 		# Current message
 		self.message = None
 
@@ -193,6 +193,7 @@ class MessageBuilder(object):
 		"""Feed with bytes. Returns a message or None, and the number of 
 		processed bytes."""
 		# TODO Reset on TWPError?
+		# FIXME This is so broken...
 		self.data += data
 		if not self.message:
 			self._create_message()
@@ -200,6 +201,7 @@ class MessageBuilder(object):
 			self._unmarshal_values()
 		except ValueError:
 			# We need more bytes
+			self.reset()
 			return None, None
 		result = self.message, self.processed
 		self.reset()
