@@ -112,9 +112,11 @@ class TWPClient(Connection):
 
 
 class TWPConsumer(asyncore.dispatcher_with_send, Connection):
-	def __init__(self, sock):
+	def __init__(self, sock, addr):
 		asyncore.dispatcher_with_send.__init__(self, sock)
 		Connection.__init__(self)
+		self._addr = addr
+		log.debug("Connect from %s %s" % self._addr)
 		self.buffer = b""
 		self.has_read_magic = False
 		self.has_read_protocol_id = False
@@ -131,6 +133,10 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 		messages = self.read_messages()
 		for message in messages:
 			self.on_message(message)
+
+	def handle_close(self):
+		log.warn("Client disconnected (%s %s)" % self._addr)
+		return asyncore.dispatcher_with_send.handle_close(self)
 
 	def write(self, data):
 		self.send(data)
@@ -181,7 +187,7 @@ class TWPServer(asyncore.dispatcher):
 		pair = self.accept()
 		if not pair is None:
 			sock, addr = pair
-			handler = self.handler_class(sock)
+			handler = self.handler_class(sock, addr)
 
 	def serve_forever(self):
 		asyncore.loop()
