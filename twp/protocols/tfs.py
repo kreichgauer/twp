@@ -29,21 +29,24 @@ class TFS(twp.protocols.rpc.RPC):
                     twp.values.String(name="file"),
                     twp.values.Int(name="mode"),
                 ), twp.values.Int()),
-            twp.protocols.rpc.RPCMethod("read", (
-                    twp.values.Int(name="fh"),
-                    twp.values.Int(name="count"),
-                ), twp.values.Binary()),
-            twp.protocols.rpc.RPCMethod("write", (
-                    twp.values.Int(name="fh"),
-                    twp.values.Binary(name="data"),
-                ), twp.values.NoValue()),
+            # FIXME we should probably put RPC invocation in a separate Proxy 
+            # class. E.g. RPCClient.getProxy returns a new instance that has the
+            # RPCMethod visitors applied.
+            #twp.protocols.rpc.RPCMethod("read", (
+            #        twp.values.Int(name="fh"),
+            #        twp.values.Int(name="count"),
+            #    ), twp.values.Binary()),
+            #twp.protocols.rpc.RPCMethod("write", (
+            #        twp.values.Int(name="fh"),
+            #        twp.values.Binary(name="data"),
+            #    ), twp.values.NoValue()),
             twp.protocols.rpc.RPCMethod("seek", (
                     twp.values.Int(name="fh"),
                     twp.values.Int(name="offset"),
                 ), twp.values.NoValue()),
-            twp.protocols.rpc.RPCMethod("close", (
-                    twp.values.Int(name="filehandle"),
-                ), twp.values.NoValue(), response_expected=False),
+            #twp.protocols.rpc.RPCMethod("close", (
+            #        twp.values.Int(name="filehandle"),
+            #    ), twp.values.NoValue(), response_expected=False),
             twp.protocols.rpc.RPCMethod("listdir", (
                     Path(name="directory"),
                 ), ListResult()),
