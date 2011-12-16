@@ -22,9 +22,9 @@ def du_directory(obj, directory):
 
 def du(host, port, directory):
     client = tfs.TFSClient(host, port)
-    facade = client.get_facade()
+    adapter = client.get_adapter()
     directory = directory.split("/")
-    du_directory(facade, directory)
+    du_directory(adapter, directory)
 
 def usage():
     print("Usage: %s <host> <port> <directory>" % sys.argv[0])

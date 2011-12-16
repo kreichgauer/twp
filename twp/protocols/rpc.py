@@ -33,11 +33,11 @@ class RPCMethod(object):
         self.result = result
         self.response_expected = response_expected
     
-    def visit(self, facade):
-        self.facade = facade
-        if hasattr(self.facade, self.name):
-            raise TypeError("Facade already has attribute %s" % self.name)
-        setattr(self.facade, self.name, self)
+    def visit(self, adapter):
+        self.adapter = adapter
+        if hasattr(self.adapter, self.name):
+            raise TypeError("Adapter already has attribute %s" % self.name)
+        setattr(self.adapter, self.name, self)
 
     def get_parameter_struct(self):
         if len(self.interface) == 1:
@@ -58,7 +58,7 @@ class RPCMethod(object):
     def call(self, **params):
         if len(params) == 1:
             _, params = params.popitem()
-        return self.facade._request(self.name, params, self.response_expected)
+        return self.adapter._request(self.name, params, self.response_expected)
 
     def __call__(self, *args, **kwargs):
         return self.call(*args, **kwargs)
@@ -138,11 +138,11 @@ class RPCClient(twp.protocol.TWPClient):
         self.request_id += 1
         return id
 
-    def get_facade(self):
-        return RPCFacade(self, self.protocol.methods)
+    def get_adapter(self):
+        return RPCAdapter(self, self.protocol.methods)
 
 
-class RPCFacade(object):
+class RPCAdapter(object):
     def __init__(self, client, methods):
         self.client = client
         self._init_methods(methods)
