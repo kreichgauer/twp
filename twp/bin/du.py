@@ -1,3 +1,4 @@
+import os.path
 import sys
 import logging
 import twp
@@ -17,7 +18,8 @@ def du_directory(obj, directory):
     for file in files:
         reply = obj.stat(directory=directory, file=file)
         stat = reply.values['result']
-        path = "/".join(directory) + "/" + file
+        path = os.path.join(*directory)
+        path = os.path.join(path, file)
         print("%d\t%s" % (stat['size'], path))
 
 def du(host, port, directory):
