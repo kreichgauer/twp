@@ -146,8 +146,8 @@ class StubGenerator(object):
 		type = node.type[0]
 		name = node.identifier[0]
 		field = None
-		if type[0] == "anydefinedby":
-			field = 'twp.values.AnyDefinedBy("%s"' % (type[1])
+		if type == "anydefinedby":
+			field = 'twp.values.AnyDefinedBy("%s"' % (node.type[1][1])
 			if optional:
 				field += ", " + optional_str
 			field += ")"
