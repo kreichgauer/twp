@@ -26,9 +26,13 @@ class TWPReader(object):
     def remaining_bytes(self):
         return len(self.buffer) - self.pos
 
-    def _verify_byte_length(self, length):
-        if self.remaining_bytes < length:
-            raise ValueError("Not enough bytes")
+    def _ensure_buffer_length(self, length):
+        """Make sure we have at least length unprocessed bytes on the buffer. 
+        Read more bytes into the buffer if neccessary."""
+        while self.remaining_bytes < length:
+            log.debug("Not enough bytes while unmarshalling from buffer."
+                      "Reading from socket and trying again.")
+            self._read_from_connection()
 
     def _read_from_connection(self, size=1024):
         data = self.connection.recv(self._recvsize)
@@ -36,7 +40,7 @@ class TWPReader(object):
         self.buffer += data
 
     def read_bytes(self, n):
-        self._verify_byte_length(n)
+        self._ensure_buffer_length(n)
         end = self.pos + n
         bytes = self.buffer[self.pos:end]
         self._advance(n)
@@ -44,7 +48,7 @@ class TWPReader(object):
 
     def read_format(self, format):
         length = struct.calcsize(format)
-        self._verify_byte_length(length)
+        self._ensure_buffer_length(length)
         values = struct.unpack_from(format, self.buffer, self.pos)
         self._advance(length)
         return values[0]
@@ -64,17 +68,6 @@ class TWPReader(object):
     def read_value(self):
         """Read a TWP value from the stream. Automatically get more bytes from 
         the stream if the buffer does not contain a complete TWP value."""
-        while True:
-            try:
-                value = self._read_value()
-                break
-            except ValueError:
-                log.debug("Not enough bytes while unmarshalling from buffer."
-                          "Reading from socket and trying again.")
-                self._read_from_connection()
-        return value
-
-    def _read_value(self):
         tag = self.read_bytes(1)[0]
         log.debug("Read tag %d" % tag)
         if tag == 0:
