@@ -6,73 +6,11 @@ import struct
 from .error import TWPError
 
 class Base(object):
-	# FIXME find a better class name
 	"""Abstract base class for TWP types."""
 	tag = None
 
-	def __init__(self, optional=False, name=None):
-		self._optional = optional
+	def __init__(self, name=None):
 		self.name = name
-	
-	def _unmarshal(self, tag, value):
-		raise NotImplementedError
-
-	def unmarshal(self, data):
-		# FIXME handle NoValue
-		tag = data[0]
-		value = data[1:]
-		if not self.__class__.handles_tag(tag):
-			raise TWPError("Invalid tag %x" % tag)
-		unmarshalled, length = self._unmarshal(tag, value)
-		length += 1
-		return unmarshalled, length
-
-	def is_optional(self):
-		return self._optional
-
-	def _marshal_tag(self, value):
-		"""Returns a byte string containing the tag value."""
-		return bytes([self.tag])
-
-	def _marshal_value(self, value):
-		"""Implement to return a byte string with the marshalled value."""
-		raise NotImplementedError
-
-	def marshal(self, value):
-		"""Concats `_marshal_tag()` and `_marshal_value()` if `is_empty()` 
-		returns False. Otherwise, a NoValue is marshalled if the instace is
-		optional, a ValueError is raised else."""
-		if value is None:
-			if not self.is_optional():
-				raise ValueError("Non-optional empty field %s." % self.name)
-			return NoValue().marshal()
-		return self._marshal_tag(value) + self._marshal_value(value)
-
-	@classmethod
-	def handles_tag(cls, tag):
-		"""Implement to return True iff the class should be used for 
-		unmarshalling a field with the given tag."""
-		return not tag is None and cls.tag == tag
-
-
-class NoValueBase(Base):
-	"""Stub for Primitives whose instances don't have a value."""
-	def is_empty(self):
-		return False
-
-	def _unmarshal(self, tag, value):
-		return None, 0
-
-	def marshal(self):
-		return bytes([self.tag])
-
-
-class EndOfContent(NoValueBase):
-	tag = 0
-
-
-class NoValue(NoValueBase):
-	tag = 1
 
 
 class _ComplexType(type):
@@ -113,46 +51,6 @@ class _Complex(Base, metaclass=_ComplexType):
 		# return a class/factory instead and create the instances in __new__
 		instance._fields = copy.deepcopy(cls._fields)
 		return instance
-
-	def _unmarshal(self, tag, value):
-		unmarshalled = {}
-		total_length = 0
-		# Marhal value field for field
-		for field in self._fields.values():
-			if not len(value):
-				# Value too short, wait for more input
-				raise ValueError()
-			val, length = self._unmarshal_field(field, value, unmarshalled)
-			value = value[length:]
-			total_length += length
-		EndOfContent().unmarshal(value)
-		value = value[1:]
-		total_length += 1
-		return unmarshalled, total_length
-
-	def _unmarshal_field(self, field, value, into):
-		# prev_values is the result of `unmarshal` so far. This all exists, so
-		# Message can override it. Ugly as shit.
-		unmarshalled, length = field.unmarshal(value)
-		into[field.name] = unmarshalled
-		return unmarshalled, length
-
-	def _marshal_value(self, values):
-		if len(values) != len(self._fields):
-			raise TypeError("Wrong number of values (expected %d, got %d" %
-				(len(values), len(self._fields)))
-		marshalled_fields = []
-		for name, field in self._fields.items():
-			self._marshal_field(field, values, marshalled_fields)
-		marshalled_fields.append(EndOfContent().marshal())
-		marshalled = b"".join(marshalled_fields)
-		return marshalled
-
-	def _marshal_field(self, field, values, into):
-		value = values.get(field.name)
-		marshalled = field.marshal(value)
-		into.append(marshalled)
-		return marshalled
 
 
 class Struct(_Complex):
@@ -277,48 +175,16 @@ class RegisteredExtension(_Complex):
 
 class Primitive(Base):
 	"""Abstract class for primitive types, i.e. types with a scalar value."""
-	pass
+	def __init__(self, *args, **kwargs):
+		super(Primitive, self).__init__(*args, **kwargs)
+		self.value = None
+
 
 class Int(Primitive):
-	_formats = {
-		# tag, length, format
-		13: (1, '>b'),
-		14: (4, '>l'),
+	formats = {
+		13: "!b",
+		14: "!i",
 	}
-
-	def _unpack_with_format(self, format, value):
-		return struct.unpack(format, value)[0]
-
-	def _unmarshal(self, tag, value):
-		length = len(value)
-		struct_length, format = self._formats[tag]
-		if length < struct_length:
-			raise ValueError("Invalid tag length pair (%d, %d)" % tag, length)
-		unmarshalled = value[:struct_length]
-		unmarshalled = self._unpack_with_format(format, unmarshalled)
-		return unmarshalled, struct_length
-
-	def _pack_with_format(self, format, value):
-		return struct.pack(format, value)
-	
-	def _marshal_tag(self, value):
-		return b""
-
-	def _marshal_value(self, value):
-		# Marshal tag and value, it's easier. `marshal()` still checks for None
-		for tag, (length, format) in self._formats.items():
-			try:
-				value = self._pack_with_format(format, value)
-				tag = bytes([tag])
-				return b"".join([tag, value])
-			except struct.error:
-				pass
-		raise TypeError("Integer value out of bounds")	
-		
-	@classmethod	
-	def handles_tag(cls, tag):
-		all_tags = [t for t, (l, f) in cls._formats.items()]
-		return tag in all_tags
 
 
 class String(Primitive):
@@ -327,122 +193,13 @@ class String(Primitive):
 	MAX_SHORT_LENGTH = 109
 	MAX_LENGTH = 2**32-1
 
-	def _unmarshal(self, tag, value):
-		if tag >= self.LONG_TAG:
-			return self._unmarshal_long(tag, value)
-		length = tag - self.SHORT_TAG
-		byte_length = len(value)
-		if byte_length < length:
-			raise ValueError("Value too short")
-		unmarshalled = value[:length]
-		try:
-			unmarshalled = unmarshalled.decode('utf-8')
-		except UnicodeDecodeError:
-			raise TWPError("Cannot decode string")
-		return unmarshalled, length
-
-	def _unmarshal_long(self, tag, value):
-		length = value[0:3]
-		value = value[4:]
-		try:
-			length = struct.unpack("!I", length)
-		except struct.error:
-			raise TWPError("Cannot unpack length")
-		if len(value) < length:
-			raise ValueError("Value too short")
-		unmarshalled = value[:length]
-		try:
-			unmarshalled = unmarshalled.decode('utf-8')
-		except UnicodeDecodeError:
-			raise TWPError("Cannot decode string")
-		length += 4
-		return unmarshalled, length
-
-	def encoded_value(self, value):
-		return value.encode('utf-8')
-
-	def _marshal_tag(self, value):
-		if self.is_long_string(value):
-			tag = self.LONG_TAG
-		else:
-			tag = self.SHORT_TAG + len(self.encoded_value(value))
-		return bytes([tag])
-
-	def is_long_string(self, value):
-		return len(self.encoded_value(value)) > 109
-
-	@classmethod
-	def handles_tag(cls, tag):
-		return tag in range(17,128)
-
-	def _marshal_value(self, value):
-		if self.is_long_string(value):
-			return self._marshal_long_value(value)
-		else:
-			return self.encoded_value(value)
-
-	def _marshal_long_value(self, value):
-		value = self.encoded_value(value)
-		if len(value) > self.MAX_LENGTH:
-			raise ValueError("Value too long for long string encoding.")
-		length = struct.pack('>I', len(value))
-		return length + value
-
 
 class Binary(Primitive):
 	SHORT_TAG = 15
 	LONG_TAG = 16
-
-	@classmethod
-	def handles_tag(cls, tag):
-		return tag in [cls.SHORT_TAG, cls.LONG_TAG]
-
-	def _is_short(self, length):
-		return length < 256
-
-	def _unmarshal(self, tag, value):
-		if tag == self.SHORT_TAG:
-			length = struct.unpack("@b", value[:1])[0]
-		else:
-			length = struct.unpack("@I", value[:4])[0]
-		if len(value) > length:
-			# Not enough bytes
-			raise ValueError()
-		unmarshalled = value[:length]
-		return unmarshalled, length
-
-	def _marshal_tag(self, value):
-		return b""
-
-	def _marshal_value(self, value):
-		length = len(value)
-		if self._is_short(length):
-			tag = bytes([self.SHORT_TAG])
-			length = struct.pack("@b", length)
-		else:
-			tag = bytes([self.LONG_TAG])
-			length = struct.pack("@I", length)
-		marshalled = tag + length + bytes(value) #sic!
-		return marshalled
 
 
 class AnyDefinedBy(Primitive):
 	def __init__(self, reference_name, *args, **kwargs):
 		super(AnyDefinedBy, self).__init__(*args, **kwargs)
 		self.reference_name = reference_name
-
-	@classmethod
-	def handles_tag(cls, tag):
-		return False
-
-	def marshal(self):
-		raise NotImplementedError("AnyDefinedBy can't marshal values")
-
-	def unmarshal(self, data):
-		raise NotImplementedError("AnyDefinedBy can't unmarshal values")
-
-
-class MessageError(RegisteredExtension):
-	registered_id = 8
-	failed_msg_typs = Int() # TODO The purpose of this field is unclear...
-	error_text = String()

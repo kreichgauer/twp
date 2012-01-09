@@ -115,8 +115,8 @@ class TWPReader(object):
     def read_int(self, tag=None):
         tag = tag or self.read_tag()
         formats = {
-            13: "@b",
-            14: "@l",
+            13: "!b",
+            14: "!l",
         }
         if not tag in formats:
             raise TWPError("Expected int tag, but saw %d" % tag)
@@ -126,8 +126,8 @@ class TWPReader(object):
     def read_binary(self, tag):
         log.debug("Reading binary")
         formats = {
-            15: "@b",
-            16: "@I"
+            15: "!b",
+            16: "!I"
         }
         format = formats[tag]
         length = self.read_with_format(format)
