@@ -27,6 +27,18 @@ class Protocol(object):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
 
+	def build_message(self, values, raw):
+		tag = raw[0]
+		msg_type = None
+		for cls in self.message_types:
+			if cls.tag == tag:
+				msg_type = cls
+				break
+		if not msg_type:
+			raise TWPError("Message not understood: %d" % tag)
+		msg = msg_type(values)
+		return msg
+
 	def define_any_defined_by(self, field, reference_value):
 		"""During marshalling/unmarshalling, this can get a field of type
 		or `AnyDefinedBy` and the value of its reference field and has to return
@@ -37,45 +49,26 @@ class Protocol(object):
 class Connection(object):
 	def __init__(self):
 		self.init_protocol()
+		self.init_reader()
 		self.buffer = b""
 
 	def init_protocol(self):
 		self.protocol = self.protocol_class()
 		self.protocol.init_connection(self)
 
+	def init_reader(self):
+		self.reader = self.reader_class(self)
+
 	def send_message(self, msg):
 		data = msg.marshal_message(self.protocol)
 		self.write(data)
 
-	def recv_messages(self):
-		"""Recv messages until all available data can be parsed into messages
-		or a timeout occurs. Return the list of parsed messages."""
-		# TODO Optional parameter msg_count=1, to guarantee result length?
-		# FIXME this needs to be re-written
-		messages = []
-		while not len(messages):
-			try:
-				self.read()
-			except socket.timeout:
-				log.debug("socket timeout")
-				break
-			messages.extend(self.read_messages())
-		return messages
-
-	def read_messages(self):
-		messages = []
-		while self.buffer:
-			# Pass data to message builder.
-			message, length = self.protocol._builder.build_message(self.buffer)
-			if message:
-				self.buffer = self.buffer[length:]
-				messages.append(message)
-				# Unmarshal more or exit of loop
-				continue
-			else:
-				# Last data chunk was a partial message
-				break
-		return messages
+	def read_twp_value(self):
+		value = self.reader.read_value()
+		raw = self.reader.processed_bytes
+		log.debug("Parsed %s into %s" % (raw, value))
+		self.reader.flush()
+		return value, raw
 
 
 class TWPClient(Connection):
@@ -117,22 +110,15 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 		Connection.__init__(self)
 		self._addr = addr
 		log.debug("Connect from %s %s" % self._addr)
-		self.buffer = b""
 		self.has_read_magic = False
 		self.has_read_protocol_id = False
+		self.read_twp_magic()
+		self.read_protocol_id()
 
 	def handle_read(self):
-		print("handle read")
-		self.read()
-		if not self.has_read_magic:
-			self.read_twp_magic()
-			return
-		if not self.has_read_protocol_id:
-			self.read_protocol_id()
-			return
-		messages = self.read_messages()
-		for message in messages:
-			self.on_message(message)
+		value, raw = self.read_twp_value()
+		message = self.protocol.build_message(value, raw)
+		self.on_message(message)
 
 	def handle_close(self):
 		log.warn("Client disconnected (%s %s)" % self._addr)
@@ -141,33 +127,23 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 	def write(self, data):
 		self.send(data)
 
-	def read(self, size=BUFSIZE):
-		data = self.recv(size)
-		log.debug("Recvd: %s" % data)
-		self.buffer += data
-
 	def read_twp_magic(self):
 		magic_length = len(TWP_MAGIC)
-		if len(self.buffer) < magic_length:
-			return
-		magic = self.buffer[:magic_length]
+		magic = self.reader.read_bytes(magic_length)
 		if magic != TWP_MAGIC:
 			log.warn("Wrong TWP magic")
 			self.close()
 			return
-		self.buffer = self.buffer[magic_length:]
+		self.reader.flush()
 		self.has_read_magic = True
 
 	def read_protocol_id(self):
-		if len(self.buffer) < 2:
-			return
-		id = values.Int()
-		id, _ = id.unmarshal(self.buffer[:2])
+		id = self.reader.read_int()
 		if id != self.protocol.protocol_id:
 			log.warn("Wrong protocol id %s" % id)
 			self.close()
 			return
-		self.buffer = self.buffer[2:]
+		self.reader.flush()
 		self.has_read_protocol_id = True
 
 	def on_message(self, message):
@@ -191,56 +167,3 @@ class TWPServer(asyncore.dispatcher):
 
 	def serve_forever(self):
 		asyncore.loop()
-
-
-class MessageBuilder(object):
-	def __init__(self, protocol):
-		self.protocol = protocol
-		self.reset()
-
-	def reset(self):
-		"""Called when build_message actually returns a message."""
-		# Number of processed bytes
-		self.processed = 0
-		# Incoming data
-		self.data = b""
-		# Current message
-		self.message = None
-
-	def build_message(self, data):
-		"""Feed with bytes. Returns a message or None, and the number of 
-		processed bytes."""
-		# TODO Reset on TWPError?
-		# FIXME This is so broken...
-		self.data += data
-		if not self.message:
-			self._create_message()
-		try:
-			self._unmarshal_values()
-		except ValueError:
-			# We need more bytes
-			self.reset()
-			return None, None
-		result = self.message, self.processed
-		self.reset()
-		return result
-
-	def _create_message(self):
-		tag = self.data[0]
-		message = None
-		for message_type in self.protocol.message_types:
-			if message_type.handles_tag(tag):
-				message = message_type()
-				break
-		if message is None:
-			raise TWPError("Unknown message tag %d" % tag)
-		self.message = message
-
-	def _unmarshal_values(self):
-		log.info("Trying to unmarshal %r" % self.data)
-		values, length = self.message.unmarshal_message(self.data, self.protocol)
-		self._did_process(length)
-
-	def _did_process(self, length):
-		self.data = self.data[length:]
-		self.processed += length

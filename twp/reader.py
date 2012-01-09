@@ -6,13 +6,12 @@ class TWPReader(object):
 
     def __init__(self, connection, _recvsize=1024):
         self.connection = connection
-        self.socket = socket
         self.buffer = b""
         self.pos = 0
         self._recvsize = _recvsize
 
     def _advance(self, n):
-        assert(n <= self.remaining_bytes)
+        assert(n <= self.remaining_byte_length)
         self.pos += n
 
     def flush(self):
@@ -23,13 +22,20 @@ class TWPReader(object):
         self.pos = 0
 
     @property
-    def remaining_bytes(self):
+    def remaining_byte_length(self):
         return len(self.buffer) - self.pos
+
+    @property
+    def processed_bytes(self):
+        return self.buffer[:self.pos]
 
     def _ensure_buffer_length(self, length):
         """Make sure we have at least length unprocessed bytes on the buffer. 
         Read more bytes into the buffer if neccessary."""
-        while self.remaining_bytes < length:
+        while self.remaining_byte_length < length:
+            # TODO what about evented servers? This will cause the whole server 
+            # to block until the current value is read completely while it 
+            # should really continue to serve other clients.
             log.debug("Not enough bytes while unmarshalling from buffer."
                       "Reading from socket and trying again.")
             self._read_from_connection()
@@ -46,6 +52,9 @@ class TWPReader(object):
         self._advance(n)
         return bytes
 
+    def read_tag(self):
+        return self.read_bytes(1)[0]
+
     def read_format(self, format):
         length = struct.calcsize(format)
         self._ensure_buffer_length(length)
@@ -53,9 +62,38 @@ class TWPReader(object):
         self._advance(length)
         return values[0]
 
-    def read_message(self):
-        """Read a message from the stream."""
-        # FIXME better name- read_complex?
+    def read_value(self):
+        """Read a TWP value from the stream. Automatically get more bytes from 
+        the stream if the buffer does not contain a complete TWP value."""
+        tag = self.read_tag()
+        log.debug("Read tag %d" % tag)
+        if tag == 0:
+            raise EndOfContent("Unexpected End-Of-Content")
+        elif tag == 1:
+            return None
+        elif tag == 2:
+            # struct
+            return self.read_complex()
+        elif tag == 3:
+            # sequence
+            return self.read_complex()
+        elif tag in range(4,12):
+            # message / union- returns 
+            return self.read_message()
+        elif tag == 12:
+            return self.read_extension()
+        elif tag in (13, 15):
+            return self.read_int(tag)
+        elif tag in (15, 17):
+            return self.read_binary(tag)
+        elif tag in range(17, 128):
+            return self.read_string(tag)
+        else:
+            # User-defined?
+            raise TWPError("Invalid tag: %d" % tag)
+
+    def read_complex(self):
+        """Read a complex value from the stream until running into EOC."""
         values = []
         while True:
             try:
@@ -65,52 +103,33 @@ class TWPReader(object):
                 break
         return values
 
-    def read_value(self):
-        """Read a TWP value from the stream. Automatically get more bytes from 
-        the stream if the buffer does not contain a complete TWP value."""
-        tag = self.read_bytes(1)[0]
-        log.debug("Read tag %d" % tag)
-        if tag == 0:
-            raise EndOfContent("Unexpected End-Of-Content")
-        elif tag == 1:
-            return None
-        elif tag == 2:
-            # struct
-            return self.read_message()
-        elif tag == 3:
-            # sequence
-            return self.read_message()
-        elif tag in range(4,12):
-            # message / union
-            return self.read_message()
-        elif tag == 12:
-            return self.read_extension()
-        elif tag == 13:
-            return self.read_int_short()
-        elif tag == 14:
-            return self.read_int_long()
-        elif tag in (15, 17):
-            return self.read_binary(tag)
-        elif tag in range(17, 128):
-            return self.read_string(tag)
-        else:
-            # User-defined?
-            raise TWPError("Invalid tag: %d" % tag)
+    def read_message(self):
+        """Read a message (or union) from the stream. Returns the id (or case) 
+        and values."""
+        tag = self.read_tag()
+        if not tag in (4, 12):
+            raise TWPError("Expected message, tag but saw %d" % tag)
+        id = tag - 4 # or union case
+        return id, self.read_complex()
 
-    def read_int_short(self):
-        log.debug("Reading short int")
-        return self.read_with_format("@b")
-    
-    def read_int_long(self):
-        log.debug("Reading long int")
-        return self.read_with_format("@l")
+    def read_int(self, tag=None):
+        tag = tag or self.read_tag()
+        formats = {
+            13: "@b",
+            14: "@l",
+        }
+        if not tag in formats:
+            raise TWPError("Expected int tag, but saw %d" % tag)
+        format = formats[tag]
+        return self.read_with_format(format)
 
     def read_binary(self, tag):
         log.debug("Reading binary")
-        format = {
+        formats = {
             15: "@b",
             16: "@I"
         }
+        format = formats[tag]
         length = self.read_with_format(format)
         return self.read_bytes(length)
 
