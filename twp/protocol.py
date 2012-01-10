@@ -78,6 +78,14 @@ class Connection(object):
 		self.reader.flush()
 		return value, raw
 
+	def read_message(self):
+		value, raw = self.read_twp_value()
+		# Let's assume it's a message
+		id, values = value
+		message = self.protocol.build_message(id, values, raw)
+		return message
+
+
 
 class TWPClient(Connection):
 	def __init__(self, host='localhost', port=5000):
@@ -125,10 +133,7 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			elif not self.has_read_protocol_id:
 				self.read_protocol_id()
 			else:
-				value, raw = self.read_twp_value()
-				# We assume it's a message
-				id, values = value
-				message = self.protocol.build_message(id, values, raw)
+				message = self.read_message()
 				self.on_message(message)
 		except reader.ReaderError as e:
 			log.warn(e)

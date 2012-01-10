@@ -1,5 +1,5 @@
 import sys
-from twp import log, protocol, fields
+from twp import log, protocol, fields, error
 from twp.message import Message
 
 class Request(Message):
@@ -25,7 +25,7 @@ class EchoClient(protocol.TWPClient):
 	def echo(self, text):
 		ping = Request(text="Hello, World!")
 		self.send_twp(ping)
-		messages = self.recv_messages()
+		message = self.read_message()
 		log.debug(messages)
 
 
@@ -33,10 +33,14 @@ class EchoConsumer(protocol.TWPConsumer):
 	protocol_class = EchoProtocol
 
 	def on_message(self, message):
-		text = message.text
-		number_of_letters = len(text.replace(" ", ""))
-		response = Response(text, number_of_letters)
-		self.send_twp(response)
+		if isinstance(message, Request):
+			log.debug("Request: %s" % message)
+			text = message.text
+			number_of_letters = len(text.replace(" ", ""))
+			response = Response(text, number_of_letters)
+			self.send_twp(response)
+		else:
+			raise error.TWPError("Unexpected Message %s" % message)
 
 
 class EchoServer(protocol.TWPServer):
