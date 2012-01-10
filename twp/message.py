@@ -32,9 +32,6 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
         except KeyError:
             super(Message, self).__setattr__(name, value)
 
-    def __repr__(self):
-        return "%s: %s" % (self.__class__, self.get_fields())
-
 
 #FIXME
 class Extension(Message): pass

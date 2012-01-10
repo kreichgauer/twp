@@ -52,7 +52,8 @@ class _Complex(Base, metaclass=_ComplexType):
 		instance._fields = copy.deepcopy(cls._fields)
 		return instance
 
-	def __init__(self, name=None, *args, **kwargs):
+	def __init__(self, *args, **kwargs):
+		name = kwargs.get("name")
 		super(_Complex, self).__init__(name=name)
 		self.update_values(*args, **kwargs)
 
@@ -72,6 +73,10 @@ class _Complex(Base, metaclass=_ComplexType):
 		except TypeError:
 			# Not a list, maybe a dict?
 			self.update_values(**values)
+
+	def __repr__(self):
+		return "%s %s %s" % (self.__class__.__name__, self.name, 
+			dict(self._fields))
 
 
 class Struct(_Complex):
@@ -98,7 +103,6 @@ class Struct(_Complex):
 			self._fields[name].value = value
 		except KeyError:
 			raise KeyError("Struct has no such field %s" % name)
-
 
 
 class Sequence(Base): # Should be Complex, but isn't
@@ -133,6 +137,9 @@ class Primitive(Base):
 	def __init__(self, *args, **kwargs):
 		super(Primitive, self).__init__(*args, **kwargs)
 		self.value = None
+
+	def __repr__(self):
+		return "%s: %s" % (self.__class__.__name__, self.value)
 
 
 class Int(Primitive):
