@@ -56,34 +56,13 @@ class _Complex(Base, metaclass=_ComplexType):
 		super(_Complex, self).__init__(name=name)
 		self.update_values(*args, **kwargs)
 
-	def update_values(self, *args, **kwargs):		
-		if len(args) > len(self._fields):
-			raise ValueError("Too many positional args")
-		for name, value in zip(self._fields.keys(), args):
-			setattr(self, name, value)
-		for name, value in kwargs.items():
-			if not name in self._fields:
-				raise ValueError("Unknown field name: %s" % name)
-			setattr(self, name, value)
-
-	def __getattr__(self, name):
-		if name in self._fields:
-			return self._fields[name].value
-		raise AttributeError()
-
-	def __setattr__(self, name, value):
-		try:
-			self._fields[name].value = value
-		except KeyError:
-			super(_Complex, self).__setattr__(name, value)
-
 	def get_fields(self):
 		"""Returns an iterable of fields in marshalling order."""
 		return self._fields.values()
 
 	@property
 	def value(self):
-		return self._fields
+		return self
 
 	@value.setter
 	def set_value(self, values):
@@ -97,6 +76,23 @@ class _Complex(Base, metaclass=_ComplexType):
 
 class Struct(_Complex):
 	tag = 2
+
+	def update_values(self, *args, **kwargs):		
+		if len(args) > len(self._fields):
+			raise ValueError("Too many positional args")
+		for name, value in zip(self._fields.keys(), args):
+			self[name] = value
+		for name, value in kwargs.items():
+			if not name in self._fields:
+				raise ValueError("Unknown field name: %s" % name)
+			self[name] = value
+
+	def __getitem__(self, name):
+		return self._fields[name].value
+
+	def __setitem__(self, name, value):
+		self._fields[name].value = value
+
 
 
 class Sequence(Base): # Should be Complex, but isn't

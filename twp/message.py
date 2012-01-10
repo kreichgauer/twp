@@ -1,6 +1,16 @@
 from twp import fields
 
 class Message(fields._Complex, metaclass=fields._ComplexType):
+    def update_values(self, *args, **kwargs):       
+        if len(args) > len(self._fields):
+            raise ValueError("Too many positional args")
+        for name, value in zip(self._fields.keys(), args):
+            setattr(self, name, value)
+        for name, value in kwargs.items():
+            if not name in self._fields:
+                raise ValueError("Unknown field name: %s" % name)
+            setattr(self, name, value)
+
     @property
     def tag(self):
         """The Message's tag. This equals 4 plus the id. Raises a 
@@ -10,6 +20,17 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
         if self.id > 7:
             raise ValueError("Message id cannot be greater than 7.")
         return self.id + 4
+
+    def __getattr__(self, name):
+        if name in self._fields:
+            return self._fields[name].value
+        raise AttributeError()
+
+    def __setattr__(self, name, value):
+        try:
+            self._fields[name].value = value
+        except KeyError:
+            super(Message, self).__setattr__(name, value)
 
     def __repr__(self):
         return "%s: %s" % (self.__class__, self.get_fields())
