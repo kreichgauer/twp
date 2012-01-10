@@ -37,14 +37,18 @@ class TWPReader(object):
             # TODO what about evented servers? This will cause the whole server 
             # to block until the current value is read completely while it 
             # should really continue to serve other clients.
-            log.debug("Not enough bytes while unmarshalling from buffer."
-                      "Reading from socket and trying again.")
-            self._read_from_connection()
+            log.debug("Need %d bytes, but only have %d. Reading from socket and"
+                      " trying again." % (length, self.remaining_byte_length))
+            if not self._read_from_connection():
+                raise ReaderError("Connection closed")
 
     def _read_from_connection(self, size=1024):
         data = self.connection.recv(self._recvsize)
+        if not len(data):
+            return False
         log.debug("Recvd %d bytes:\n%s" % (len(data), data))
         self.buffer += data
+        return True
 
     def read_bytes(self, n):
         self._ensure_buffer_length(n)
@@ -80,7 +84,7 @@ class TWPReader(object):
             return self.read_complex()
         elif tag in range(4,12):
             # message / union- returns 
-            return self.read_message()
+            return self.read_message(tag)
         elif tag == 12:
             return self.read_extension()
         elif tag in (13, 15):
@@ -104,10 +108,10 @@ class TWPReader(object):
                 break
         return values
 
-    def read_message(self):
+    def read_message(self, tag=None):
         """Read a message (or union) from the stream. Returns the id (or case) 
         and values."""
-        tag = self.read_tag()
+        tag = tag or self.read_tag()
         if not tag in (4, 12):
             raise TWPError("Expected message, tag but saw %d" % tag)
         id = tag - 4 # or union case
@@ -151,3 +155,7 @@ class TWPReader(object):
 
     def read_extension(self, tag):
         raise TWPError("Cannot handle extension %s" % tag)
+
+
+class ReaderError(Exception):
+    pass

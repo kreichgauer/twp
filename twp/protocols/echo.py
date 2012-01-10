@@ -24,7 +24,7 @@ class EchoClient(protocol.TWPClient):
 
 	def echo(self, text):
 		ping = Request(text="Hello, World!")
-		self.send_message(ping)
+		self.send_twp(ping)
 		messages = self.recv_messages()
 		log.debug(messages)
 
@@ -36,7 +36,7 @@ class EchoConsumer(protocol.TWPConsumer):
 		text = message.text
 		number_of_letters = len(text.replace(" ", ""))
 		response = Response(text, number_of_letters)
-		self.send_message(response)
+		self.send_twp(response)
 
 
 class EchoServer(protocol.TWPServer):

@@ -1,7 +1,6 @@
 import socket
 import asyncore
-from twp import fields, log, marshalling
-from twp.reader import TWPReader
+from twp import fields, log, marshalling, reader
 from twp.error import TWPError
 
 BUFSIZE = 1024
@@ -26,11 +25,10 @@ class Protocol(object):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
 
-	def build_message(self, values, raw):
-		tag = raw[0]
+	def build_message(self, id, values, raw):
 		msg_type = None
 		for cls in self.message_types:
-			if cls.tag == tag:
+			if cls.id == id:
 				msg_type = cls
 				break
 		if not msg_type:
@@ -46,7 +44,7 @@ class Protocol(object):
 
 
 class Connection(object):
-	reader_class = TWPReader
+	reader_class = reader.TWPReader
 	def __init__(self):
 		self.init_protocol()
 		self.init_reader()
@@ -121,9 +119,23 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 		self.read_protocol_id()
 
 	def handle_read(self):
-		value, raw = self.read_twp_value()
-		message = self.protocol.build_message(value, raw)
-		self.on_message(message)
+		try:
+			if not self.has_read_magic:
+				self.read_twp_magic()
+			elif not self.has_read_protocol_id:
+				self.read_protocol_id()
+			else:
+				value, raw = self.read_twp_value()
+				# We assume it's a message
+				id, values = value
+				message = self.protocol.build_message(id, values, raw)
+				self.on_message(message)
+		except reader.ReaderError as e:
+			log.warn(e)
+			self.close()
+		except Exception as e:
+			log.error(e)
+			self.close()
 
 	def handle_close(self):
 		log.warn("Client disconnected (%s %s)" % self._addr)
