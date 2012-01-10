@@ -65,7 +65,7 @@ class _Complex(Base, metaclass=_ComplexType):
 		return self
 
 	@value.setter
-	def set_value(self, values):
+	def value(self, values):
 		# Delegate to field definitions
 		try:
 			self.update_values(*values)
@@ -88,10 +88,16 @@ class Struct(_Complex):
 			self[name] = value
 
 	def __getitem__(self, name):
-		return self._fields[name].value
+		try:
+			return self._fields[name].value
+		except KeyError:
+			raise KeyError("Struct has no such field %s" % name)
 
 	def __setitem__(self, name, value):
-		self._fields[name].value = value
+		try:
+			self._fields[name].value = value
+		except KeyError:
+			raise KeyError("Struct has no such field %s" % name)
 
 
 

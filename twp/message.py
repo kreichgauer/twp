@@ -24,7 +24,7 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
     def __getattr__(self, name):
         if name in self._fields:
             return self._fields[name].value
-        raise AttributeError()
+        raise AttributeError("Message has no attribute named %s" % name)
 
     def __setattr__(self, name, value):
         try:
