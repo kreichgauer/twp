@@ -4,6 +4,14 @@ import twp
 class Double(twp.fields.Base):
     tag = 160
 
+    @staticmethod
+    def unmarshal(self, bytes):
+        try:
+            return struct.unpack("!d", bytes)
+        except struct.error:
+            raise TWPError("Failed to decode Double from %s" % value)
+
+
 class Expression(twp.values.Struct):
     host = twp.values.Binary()
     port = twp.values.Int()
@@ -53,11 +61,7 @@ class CalculatorProtocol(twp.protocol.Protocol):
         if length != 8:
             raise TWPError("Expected 8 for Double length byte, got %s" % length)
         value = reader.read_bytes(8)
-        try:
-            value = struct.unpack("!d", value)
-        except struct.error:
-            raise TWPError("Failed to decode Double from %s" % value)
-        return value
+        return Double.unmarshal(value)
 
 
 class OperatorImplementation(twp.protocol.TWPConsumer):
