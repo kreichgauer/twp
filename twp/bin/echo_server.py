@@ -1,3 +1,4 @@
+import sys
 from twp.protocol import TWPServer
 from twp.protocols import echo
 

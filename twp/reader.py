@@ -1,3 +1,4 @@
+import struct
 from twp import log
 from twp.error import TWPError, EndOfContent
 
@@ -18,7 +19,7 @@ class TWPReader(object):
         """Remove processed bytes from the input buffer to start processing a 
         new message."""
         # FIXME better name
-        self.buffer = buffer[self.pos:]
+        self.buffer = self.buffer[self.pos:]
         self.pos = 0
 
     @property
@@ -55,7 +56,7 @@ class TWPReader(object):
     def read_tag(self):
         return self.read_bytes(1)[0]
 
-    def read_format(self, format):
+    def read_with_format(self, format):
         length = struct.calcsize(format)
         self._ensure_buffer_length(length)
         values = struct.unpack_from(format, self.buffer, self.pos)
@@ -140,7 +141,7 @@ class TWPReader(object):
         if tag < long_tag:
             length = tag - short_tag
         else:
-            length = self.read_format("@I")
+            length = self.read_with_format("@I")
         value = self.read_bytes(length)
         try:
             value = value.decode("utf-8")

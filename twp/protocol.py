@@ -1,16 +1,15 @@
 import socket
 import asyncore
-from twp import log, values
+from twp import fields, log, marshalling
+from twp.reader import TWPReader
 from twp.error import TWPError
 
 BUFSIZE = 1024
 TWP_MAGIC = b"TWP3\n"
 
 class Protocol(object):
-	def __init__(self):
-		self._builder = MessageBuilder(self)
-
 	def init_connection(self, connection):
+		# FIXME delete?
 		self.connection = connection
 
 	@property
@@ -36,7 +35,7 @@ class Protocol(object):
 				break
 		if not msg_type:
 			raise TWPError("Message not understood: %d" % tag)
-		msg = msg_type(values)
+		msg = msg_type(*values)
 		return msg
 
 	def define_any_defined_by(self, field, reference_value):
@@ -47,6 +46,7 @@ class Protocol(object):
 
 
 class Connection(object):
+	reader_class = TWPReader
 	def __init__(self):
 		self.init_protocol()
 		self.init_reader()
@@ -57,13 +57,23 @@ class Connection(object):
 		self.protocol.init_connection(self)
 
 	def init_reader(self):
+		"""Initialize an instance of twp.reader.TWPReader to use with this
+		session."""
 		self.reader = self.reader_class(self)
 
-	def send_message(self, msg):
-		data = msg.marshal_message(self.protocol)
+	def send_twp(self, twp_value):
+		"""Send pretty much anything that can be marshalled."""
+		# FIXME marshalling should support writing to socket
+		data = marshalling.marshal(twp_value)
 		self.write(data)
 
 	def read_twp_value(self):
+		"""Have the reader read a complete TWP value (usually a message) from 
+		the socket."""
+		# This is slightly inefficient, because a server could continue serving 
+		# other clients if someone sent an incomplete message. Instead we just 
+		# keep reading in a blocking manner, until the message is complete. Also
+		# good way for DoS.
 		value = self.reader.read_value()
 		raw = self.reader.processed_bytes
 		log.debug("Parsed %s into %s" % (raw, value))
@@ -87,18 +97,13 @@ class TWPClient(Connection):
 		self.socket.connect((host, port))
 
 	def _init_session(self):
-		protocol_id = values.Int().marshal(self.protocol.protocol_id)
+		protocol_id = marshalling.marshal_int(self.protocol.protocol_id)
 		self.write(TWP_MAGIC + protocol_id)
 
 	def write(self, data):
 		data = bytes(data)
 		self.socket.sendall(data)
 		log.debug('Sent data: %r' % data)
-
-	def read(self, size=BUFSIZE):
-		data = self.socket.recv(size)
-		log.debug("Recvd: %s" % data)
-		self.buffer += data
 
 	def close(self):
 		self.socket.close()
