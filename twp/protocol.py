@@ -42,6 +42,10 @@ class Protocol(object):
 		an instance to marshal that field's value into."""
 		raise NotImplementedError("No unmarshalling for AnyDefinedBy specified")
 
+	def read_application_type(self, tag):
+		"""Hook for implementing application types in Protocols."""
+		raise NotImplementedError()
+
 
 class Connection(object):
 	reader_class = reader.TWPReader
@@ -93,9 +97,9 @@ class TWPClient(Connection):
 		self.connect(host, port)
 		self._init_session()
 
-	def init_reader(self):
-		# Client does not walk like a socket
-		self.reader = self.reader_class(self.socket)
+	def recv(self, *args, **kwargs):
+		# Reader wants Connection to quack like a socket
+		return self.socket(*args, **kwargs)
 
 	def create_socket(self, family, type):
 		sock = socket.socket(family, type)

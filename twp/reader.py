@@ -93,6 +93,8 @@ class TWPReader(object):
             return self.read_binary(tag)
         elif tag in range(17, 128):
             return self.read_string(tag)
+        elif tag in range(160, 256):
+            return self.read_application_type(tag)
         else:
             # User-defined?
             raise TWPError("Invalid tag: %d" % tag)
@@ -152,6 +154,9 @@ class TWPReader(object):
         except UnicodeError:
             raise TWPError("Failed to utf-8 decode string value")
         return value
+
+    def read_application_type(self, tag):
+        return self.connection.protocol.read_application_type(tag)
 
     def read_extension(self, tag):
         raise TWPError("Cannot handle extension %s" % tag)
