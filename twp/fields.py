@@ -52,6 +52,48 @@ class _Complex(Base, metaclass=_ComplexType):
 		instance._fields = copy.deepcopy(cls._fields)
 		return instance
 
+	def __init__(self, name=None, *args, **kwargs):
+		super(_Complex, self).__init__(name=name)
+		self.update_values(*args, **kwargs)
+
+	def update_values(self, *args, **kwargs):		
+		if len(args) > len(self._fields):
+			raise ValueError("Too many positional args")
+		for name, value in zip(self._fields.keys(), args):
+			setattr(self, name, value)
+		for name, value in kwargs.items():
+			if not name in self._fields:
+				raise ValueError("Unknown field name: %s" % name)
+			setattr(self, name, value)
+
+	def __getattr__(self, name):
+		if name in self._fields:
+			return self._fields[name].value
+		raise AttributeError()
+
+	def __setattr__(self, name, value):
+		try:
+			self._fields[name].value = value
+		except KeyError:
+			super(_Complex, self).__setattr__(name, value)
+
+	def get_fields(self):
+		"""Returns an iterable of fields in marshalling order."""
+		return self._fields.values()
+
+	@property
+	def value(self):
+		return self._fields
+
+	@value.setter
+	def set_value(self, values):
+		# Delegate to field definitions
+		try:
+			self.update_values(*values)
+		except TypeError:
+			# Not a list, maybe a dict?
+			self.update_values(**values)
+
 
 class Struct(_Complex):
 	tag = 2
@@ -60,78 +102,6 @@ class Struct(_Complex):
 class Sequence(Base): # Should be Complex, but isn't
 	tag = 3
 	type = None
-
-	def _marshal_value(self, values):
-		marshalled = [self.type.marshal(value) for value in values]
-		marshalled.append(EndOfContent().marshal())
-		return b"".join(marshalled)
-
-	def _unmarshal(self, tag, value):
-		unmarshalled = []
-		total_length = 0
-		while value:
-			if value[0] == EndOfContent.tag:
-				total_length += 1
-				return unmarshalled, total_length
-			val, length = self.type.unmarshal(value)
-			unmarshalled.append(val)
-			value = value[length:]
-			total_length += length
-		# Need more bytes
-		raise ValueError()
-
-
-class Message(_Complex):
-	def __init__(self, **values):
-		self.protocol = None
-		self.values = values
-
-	@property
-	def tag(self):
-		"""The Message's tag. This equals 4 plus the id. Raises a 
-		ValueError if the id is larger than 7."""
-		if not hasattr(self, 'id'):
-			raise ValueError("Message must have an id attribute.")
-		if self.id > 7:
-			raise ValueError("Message id cannot be greater than 7.")
-		return self.id + 4
-
-	@classmethod
-	def handles_tag(cls, tag):
-		"""Implement to return True iff the class should be used for 
-		unmarshalling a field with the given tag."""
-		return tag == cls.id + 4
-
-	def marshal_message(self, protocol):
-		# Set this, so we can ask it for the definition of AnyDefinedBy fields
-		# Yes, I know this stinks.
-		self.protocol = protocol
-		marshalled = self.marshal(self.values)
-		self.protocol = None
-		return marshalled
-
-	def _marshal_field(self, field, values, into):
-		# Have Protocol resolve AnyDefinedBy fields
-		if isinstance(field, AnyDefinedBy):
-			reference_value = values[field.reference_name]
-			field = self.protocol.define_any_defined_by(field, reference_value)
-		return super(Message, self)._marshal_field(field, values, into)
-
-	def unmarshal_message(self, data, protocol):
-		self.protocol = protocol
-		unmarshalled, length = self.unmarshal(data)
-		self.values = unmarshalled
-		self.protocol = None
-		return unmarshalled, length
-
-	def _unmarshal_field(self, field, value, into):
-		if isinstance(field, AnyDefinedBy):
-			reference_value = into[field.reference_name]
-			field = self.protocol.define_any_defined_by(field, reference_value)
-		return super(Message, self)._unmarshal_field(field, value, into)
-
-	def __repr__(self):
-		return "%s: %s" % (self.__class__, self.values)
 
 
 class Union(_Complex):
