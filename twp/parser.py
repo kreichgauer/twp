@@ -45,9 +45,9 @@ with TraceVariables():
 		field = Optional("optional") & type & identifier & semicolon > Field
 		structdef = Drop("struct") & identifier & Optional(eq & idPair) & lbr & field[1:] & rbr > StructDef
 		sequencedef = "sequence" & lt & type & gt & identifier & semicolon > SequenceDef
-		casedef = "case" & number & colon & type & identifier & semicolon > CaseDef
-		uniondef = "union" & identifier & lbr & casedef[1:] & rbr > UnionDef
-		forwarddef = "typedef" & identifier & semicolon > ForwardDef
+		casedef = Drop("case") & number & colon & type & identifier & semicolon > CaseDef
+		uniondef = Drop("union") & identifier & lbr & casedef[1:] & rbr > UnionDef
+		forwarddef = Drop("typedef") & identifier & semicolon > ForwardDef
 		messageId = Regexp(r"[0-7]") >> int
 		messagedef = "message" & identifier & eq & Or(messageId > "id", idPair) & lbr & field[:] & rbr > MessageDef
 
@@ -59,7 +59,6 @@ with TraceVariables():
 
 
 class StubGenerator(object):
-
 	def __init__(self, ast, output_stream=sys.stdout):
 		self.ast = ast
 		self.output_stream = output_stream
@@ -73,7 +72,6 @@ class StubGenerator(object):
 		self.output_stream.write(str)
 
 	def writeln(self, str):
-		# Remember to append a '\n' at the end.
 		if len(str):
 			str = self._indent_str() + str
 		self.write(str + "\n")
@@ -182,8 +180,30 @@ class StubGenerator(object):
 		self.writeln("type = %s" % type)
 		self.dedent()
 
+	def generate_uniondef(self, node):
+		name = cap_and_camelcase(node.identifier[0])
+		self.start_class(name, "twp.values.Union")
+		self.indent()
+		self.writeln("cases = {")
+		self.indent()
+		for casedef in node.CaseDef:
+			caseno = casedef[0]
+			line = "%d: " % caseno
+			#name = casedef.identifier[0]
+			type = casedef.type[0]
+			if type == "anydefinedby":
+				line += 'twp.values.AnyDefinedBy("%s")' % (node.type[1][1])
+			elif type[0] == "identifier":
+				line += "%s()" % cap_and_camelcase(type[1])
+			else: #type[0] == "primitive"
+				# Primitiive
+				line += "twp.values.%s(%s)" % (type[1].capitalize(), optional_str)
+			self.writeln("%s," % line)
+		self.dedent()
+		self.writeln("}")
+		self.dedent()
+
 	def generate_forwarddef(self, node):
-		# TODO implement
 		print("ForwardDef:\n%s" % node)
 
 
