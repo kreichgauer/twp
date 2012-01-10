@@ -1,6 +1,6 @@
 from twp import fields
 
-class Message(object, metaclass=fields._ComplexType):
+class Message(fields._Complex, metaclass=fields._ComplexType):
     def __init__(self, *values, **kwargs):
         # Only a message can have values
         self.init_values(*values, **kwargs)
@@ -27,3 +27,7 @@ class Message(object, metaclass=fields._ComplexType):
 
     def __repr__(self):
         return "%s: %s" % (self.__class__, self.values)
+
+
+#FIXME
+class Extension(Message): pass

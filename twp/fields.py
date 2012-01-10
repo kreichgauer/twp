@@ -56,23 +56,6 @@ class _Complex(Base, metaclass=_ComplexType):
 class Struct(_Complex):
 	tag = 2
 
-	@classmethod
-	def with_fields(cls, *args, name=None, **kwargs):
-		"""Returns an instance of Struct with the fields given in kwargs."""
-		struct = cls(name=name)
-		for field in args:
-			assert(field.name)
-			struct._add_field(field.name, field)
-		for name, field in kwargs.items():
-			struct._add_field(name, field)
-		return struct
-
-	def _add_field(self, name, field):
-		if name in self._fields:
-			raise ValueError("Struct already contains a field with this name")
-		self._fields[name] = field
-		field.name = field.name or name
-
 
 class Sequence(Base): # Should be Complex, but isn't
 	tag = 3
