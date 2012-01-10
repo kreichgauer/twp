@@ -130,9 +130,10 @@ class Primitive(Base):
 
 
 class Int(Primitive):
+	# TODO support negative integers
 	formats = {
-		13: "!b",
-		14: "!i",
+		13: "!B",
+		14: "!I",
 	}
 
 
