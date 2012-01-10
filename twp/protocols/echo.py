@@ -1,4 +1,5 @@
 import sys
+import re
 from twp import log, protocol, fields, error
 from twp.message import Message
 
@@ -22,11 +23,11 @@ class EchoProtocol(protocol.Protocol):
 class EchoClient(protocol.TWPClient):
 	protocol_class = EchoProtocol
 
-	def echo(self, text):
-		ping = Request(text="Hello, World!")
+	def echo(self, text="Hello, World!"):
+		ping = Request(text)
 		self.send_twp(ping)
 		message = self.read_message()
-		log.debug(messages)
+		log.debug(message)
 
 
 class EchoConsumer(protocol.TWPConsumer):
@@ -36,7 +37,8 @@ class EchoConsumer(protocol.TWPConsumer):
 		if isinstance(message, Request):
 			log.debug("Request: %s" % message)
 			text = message.text
-			number_of_letters = len(text.replace(" ", ""))
+			letters = re.sub('[^A-Za-z]','', text)
+			number_of_letters = len(letters)
 			response = Response(text, number_of_letters)
 			self.send_twp(response)
 		else:

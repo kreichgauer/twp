@@ -86,13 +86,16 @@ class Connection(object):
 		return message
 
 
-
 class TWPClient(Connection):
 	def __init__(self, host='localhost', port=5000):
-		Connection.__init__(self)
 		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		Connection.__init__(self)
 		self.connect(host, port)
 		self._init_session()
+
+	def init_reader(self):
+		# Client does not walk like a socket
+		self.reader = self.reader_class(self.socket)
 
 	def create_socket(self, family, type):
 		sock = socket.socket(family, type)

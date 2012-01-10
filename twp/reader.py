@@ -112,8 +112,8 @@ class TWPReader(object):
         """Read a message (or union) from the stream. Returns the id (or case) 
         and values."""
         tag = tag or self.read_tag()
-        if not tag in (4, 12):
-            raise TWPError("Expected message, tag but saw %d" % tag)
+        if not 4 <= tag <= 11:
+            raise TWPError("Expected message tag but saw %d" % tag)
         id = tag - 4 # or union case
         return id, self.read_complex()
 
