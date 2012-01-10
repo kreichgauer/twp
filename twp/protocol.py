@@ -36,12 +36,6 @@ class Protocol(object):
 		msg = msg_type(*values)
 		return msg
 
-	def define_any_defined_by(self, field, reference_value):
-		"""During marshalling/unmarshalling, this can get a field of type
-		or `AnyDefinedBy` and the value of its reference field and has to return
-		an instance to marshal that field's value into."""
-		raise NotImplementedError("No unmarshalling for AnyDefinedBy specified")
-
 	def read_application_type(self, tag):
 		"""Hook for implementing application types in Protocols."""
 		raise NotImplementedError()
