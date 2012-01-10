@@ -1,5 +1,6 @@
 import struct
 import twp
+import twp.fields
 
 class Double(twp.fields.Base):
     tag = 160
@@ -11,34 +12,33 @@ class Double(twp.fields.Base):
         except struct.error:
             raise TWPError("Failed to decode Double from %s" % value)
 
-
-class Expression(twp.values.Struct):
-    host = twp.values.Binary()
-    port = twp.values.Int()
+class Expression(twp.fields.Struct):
+    host = twp.fields.Binary()
+    port = twp.fields.Int()
     arguments = Parameters()
 
-class Term(twp.values.Union):
+class Term(twp.fields.Union):
     cases = {
         0: Double(),
         1: Expression(),
     }
 
-class Parameters(twp.values.Sequence):
+class Parameters(twp.fields.Sequence):
     type = Term()
 
-class Request(twp.values.Message):
+class Request(twp.fields.Message):
     id = 0
-    request_id = twp.values.Int()
+    request_id = twp.fields.Int()
     arguments = Parameters()
 
-class Reply(twp.values.Message):
+class Reply(twp.fields.Message):
     id = 1
-    request_id = twp.values.Int()
+    request_id = twp.fields.Int()
     result = Double()
 
-class Error(twp.values.Message):
+class Error(twp.fields.Message):
     id = 2
-    text = twp.values.String()
+    text = twp.fields.String()
 
 class CalculatorProtocol(twp.protocol.Protocol):
     protocol_id = 5
@@ -65,3 +65,4 @@ class CalculatorProtocol(twp.protocol.Protocol):
 
 
 class OperatorImplementation(twp.protocol.TWPConsumer):
+    pass
