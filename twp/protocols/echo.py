@@ -1,15 +1,15 @@
 import sys
-from twp import log, protocol, values
+from twp import log, protocol, fields
 
-class Request(values.Message):
+class Request(fields.Message):
 	id = 0
-	text = values.String()
+	text = fields.String()
 
 
-class Response(values.Message):
+class Response(fields.Message):
 	id = 1
-	text = values.String()
-	number_of_letters = values.Int()
+	text = fields.String()
+	number_of_letters = fields.Int()
 
 
 class EchoClient(protocol.TWPClient):
@@ -24,6 +24,19 @@ class EchoClient(protocol.TWPClient):
 		self.send_message(ping)
 		messages = self.recv_messages()
 		log.debug(messages)
+
+
+class EchoConsumer(protocol.TWPConsumer):
+	def on_message(self, message):
+		text = message.text
+		number_of_letters = len(text.replace(" ", ""))
+		response = Response(text, number_of_letters)
+		self.send_message(response)
+
+
+class EchoServer(TWPServer):
+    handler_class = echo.EchoConsumer
+
 
 if __name__ == "__main__":
 	client = EchoClient()
