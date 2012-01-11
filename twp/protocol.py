@@ -124,8 +124,6 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 		log.debug("Connect from %s %s" % self._addr)
 		self.has_read_magic = False
 		self.has_read_protocol_id = False
-		self.read_twp_magic()
-		self.read_protocol_id()
 
 	def handle_read(self):
 		try:
@@ -140,7 +138,8 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			log.warn(e)
 			self.close()
 		except Exception as e:
-			log.error(e)
+			import traceback
+			traceback.print_exc()
 			self.close()
 
 	def handle_close(self):
@@ -175,8 +174,10 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 
 class TWPServer(asyncore.dispatcher):
 	handler_class = None
-	def __init__(self, host, port):
+	def __init__(self, host, port, handler_class=None):
 		asyncore.dispatcher.__init__(self)
+		if handler_class:
+			self.handler_class = handler_class
 		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.set_reuse_addr()
 		self.bind((host, port))
