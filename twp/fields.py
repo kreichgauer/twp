@@ -108,9 +108,11 @@ class Struct(_Complex):
 class Sequence(Base): # Should be Complex, but isn't
 	tag = 3
 	type = None
+	value = []
 	def __new__(cls, *args, **kwargs):
 		instance = super(Sequence, cls).__new__(cls)
-		instance.type = copy.deepcopy(cls.type)
+		# Destroys the Forward descriptor for some reason.
+		#instance.type = copy.deepcopy(cls.type)
 		return instance
 
 
@@ -120,6 +122,10 @@ class Union(Base): # Should be Complex, but isn't
 		instance = super(Union, cls).__new__(cls)
 		instance.cases = copy.deepcopy(cls.cases)
 		return instance
+
+	@property
+	def casedef(self):
+		return self.cases.get(self._case)
 	
 	@property
 	def value(self):
@@ -131,6 +137,9 @@ class Union(Base): # Should be Complex, but isn't
 
 	@value.setter
 	def value(self, val):
+		if val is None:
+			self._case = -1
+			return
 		case, val = val
 		try:
 			field = self.cases[case]

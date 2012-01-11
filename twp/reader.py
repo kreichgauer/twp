@@ -105,6 +105,9 @@ class TWPReader(object):
         while True:
             try:
                 val = self.read_value()
+                if val is None:
+                    # No value tag?
+                    break
                 values.append(val)
             except EndOfContent:
                 break

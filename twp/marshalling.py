@@ -23,7 +23,7 @@ def _marshal_field(field):
     elif isinstance(field, Sequence):
         return _marshal_sequence(field)
     elif isinstance(field, Union):
-        raise NotImplementedError()
+        return _marshal_union(field)
     elif isinstance(field, AnyDefinedBy):
         return _marshal_any_defined_by(field)
     else:
@@ -38,12 +38,22 @@ def _marshal_complex(complex):
 def _marshal_sequence(sequence):
     type_field = sequence.type
     values = []
-    for val in sequence.value:
+    for val in sequence.value or []:
         type_field.value = val
         values.append(_marshal_field(type_field))
     type_field.value = None
+    # Not sure if we would have to send NO_VAL if len(values) == 0, probably not.
+    values = b"".join(values)
     tag = _marshal_tag(sequence.tag)
-    return tag + b"".join(values) + EOC
+    return tag + values + EOC
+
+def _marshal_union(union):
+    val = union.value
+    if val is None:
+        return NO_VAL
+    case, field = val
+    tag = _marshal_tag(4 + case)
+    return tag + _marshal_field(union.casedef)
 
 def _marshal_any_defined_by(field):
     val = field.value

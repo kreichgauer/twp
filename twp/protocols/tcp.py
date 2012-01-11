@@ -24,6 +24,13 @@ class _ForwardTerm(twp.fields.Base):
         if not self._ref:
             self._ref = Term()
         return self._ref
+
+    def __get__(self, instance, owner):
+        print(instance, owner)
+        import pdb;pdb.set_trace()
+        if instance is None:
+            return self
+        return self.ref
     
     @property
     def value(self):
