@@ -82,9 +82,8 @@ class TWPReader(object):
         elif tag == 3:
             # sequence
             return self.read_complex()
-        elif tag in range(4,12):
-            # message / union- returns 
-            return self.read_message(tag)
+        elif tag in range(4,12): 
+            return self.read_union(tag)
         elif tag == 12:
             return self.read_extension()
         elif tag in (13, 15):
@@ -121,6 +120,13 @@ class TWPReader(object):
             raise TWPError("Expected message tag but saw %d" % tag)
         id = tag - 4 # or union case
         return id, self.read_complex()
+
+    def read_union(self, tag=None):
+        tag = tag or self.read_tag()
+        if not 4 <= tag <= 11:
+            raise TWPError("Expected union tag but saw %d" % tag)
+        case = tag - 4
+        return case, self.read_value()
 
     def read_int(self, tag=None):
         tag = tag or self.read_tag()

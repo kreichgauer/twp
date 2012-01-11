@@ -63,21 +63,21 @@ class Connection(object):
 		data = marshalling.marshal(twp_value)
 		self.write(data)
 
-	def read_twp_value(self):
+	def _read_message(self):
 		"""Have the reader read a complete TWP value (usually a message) from 
 		the socket."""
 		# This is slightly inefficient, because a server could continue serving 
 		# other clients if someone sent an incomplete message. Instead we just 
 		# keep reading in a blocking manner, until the message is complete. Also
 		# good way for DoS.
-		value = self.reader.read_value()
+		value = self.reader.read_message()
 		raw = self.reader.processed_bytes
 		log.debug("Parsed %s into %s" % (raw, value))
 		self.reader.flush()
 		return value, raw
 
 	def read_message(self):
-		value, raw = self.read_twp_value()
+		value, raw = self._read_message()
 		# Let's assume it's a message
 		id, values = value
 		message = self.protocol.build_message(id, values, raw)
