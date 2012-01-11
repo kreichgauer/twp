@@ -57,7 +57,7 @@ class _Complex(Base, metaclass=_ComplexType):
 		return instance
 
 	def __init__(self, *args, **kwargs):
-		name = kwargs.get("name")
+		name = kwargs.pop("name", None)
 		super(_Complex, self).__init__(name=name)
 		self.update_values(*args, **kwargs)
 
