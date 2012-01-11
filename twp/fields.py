@@ -108,11 +108,36 @@ class Struct(_Complex):
 class Sequence(Base): # Should be Complex, but isn't
 	tag = 3
 	type = None
+	def __new__(cls, *args, **kwargs):
+		instance = super(Sequence, cls).__new__(cls)
+		instance.type = copy.deepcopy(cls.type)
+		return instance
 
 
-class Union(_Complex):
-	# TODO implement
-	pass
+class Union(Base): # Should be Complex, but isn't
+	_case = -1
+	def __new__(cls, *args, **kwargs):
+		instance = super(Union, cls).__new__(cls)
+		instance.cases = copy.deepcopy(cls.cases)
+		return instance
+	
+	@property
+	def value(self):
+		try:
+			field = self.cases[self._case]
+		except KeyError:
+			return None
+		return self._case, field.value
+
+	@value.setter
+	def value(self, val):
+		case, val = val
+		try:
+			field = self.cases[case]
+		except KeyError:
+			raise ValueError("Invalid case %d" % case)
+		self._case = case
+		field.value = val
 
 
 class RegisteredExtension(_Complex):
