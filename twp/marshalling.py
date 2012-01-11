@@ -16,7 +16,9 @@ def marshal(val):
         return marshal_value(val)
 
 def _marshal_field(field):
-    if isinstance(field, Primitive):
+    if field.is_application_type:
+        return field.marshal()
+    elif isinstance(field, Primitive):
         return marshal_value(field.value)
     elif isinstance(field, Struct):
         return _marshal_complex(field)

@@ -3,16 +3,24 @@ import twp
 import twp.fields
 import twp.message
 import twp.protocol
+import twp.error
 
 class Double(twp.fields.Primitive):
     tag = 160
 
     @staticmethod
-    def unmarshal(self, bytes):
+    def unmarshal(bytes):
         try:
             return struct.unpack("!d", bytes)
         except struct.error:
             raise TWPError("Failed to decode Double from %s" % value)
+
+    def marshal(self):
+        try:
+            return struct.pack("!Bd", self.tag, self.value)
+        except struct.error:
+            raise twp.error.TWPError("Failed to encode Double from %s" % self.value)
+
 
 class _ForwardTerm(twp.fields.Base):
     # Abstract to twp.fields
@@ -26,8 +34,6 @@ class _ForwardTerm(twp.fields.Base):
         return self._ref
 
     def __get__(self, instance, owner):
-        print(instance, owner)
-        import pdb;pdb.set_trace()
         if instance is None:
             return self
         return self.ref

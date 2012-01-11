@@ -12,6 +12,10 @@ class Base(object):
 	def __init__(self, name=None):
 		self.name = name
 
+	@property
+	def is_application_type(self):
+		return self.tag and self.tag >= 160
+
 
 class _ComplexType(type):
 	"""Metaclass for Complex classes with fields."""
