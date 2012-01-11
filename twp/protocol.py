@@ -93,7 +93,7 @@ class TWPClient(Connection):
 
 	def recv(self, *args, **kwargs):
 		# Reader wants Connection to quack like a socket
-		return self.socket(*args, **kwargs)
+		return self.socket.recv(*args, **kwargs)
 
 	def create_socket(self, family, type):
 		sock = socket.socket(family, type)
