@@ -1,8 +1,10 @@
 import struct
 import twp
 import twp.fields
+import twp.message
+import twp.protocol
 
-class Double(twp.fields.Base):
+class Double(twp.fields.Primitive):
     tag = 160
 
     @staticmethod
@@ -11,6 +13,29 @@ class Double(twp.fields.Base):
             return struct.unpack("!d", bytes)
         except struct.error:
             raise TWPError("Failed to decode Double from %s" % value)
+
+class _ForwardTerm(twp.fields.Base):
+    # Abstract to twp.fields
+    def __init__(self):
+        self._ref = None
+
+    @property
+    def ref(self):
+        if not self._ref:
+            self._ref = Term()
+        return self._ref
+    
+    @property
+    def value(self):
+        return self.ref.value
+
+    @value.setter
+    def value(self, val):
+        self.ref.value = val
+
+
+class Parameters(twp.fields.Sequence):
+    type = _ForwardTerm()
 
 class Expression(twp.fields.Struct):
     host = twp.fields.Binary()
@@ -23,20 +48,17 @@ class Term(twp.fields.Union):
         1: Expression(),
     }
 
-class Parameters(twp.fields.Sequence):
-    type = Term()
-
-class Request(twp.fields.Message):
+class Request(twp.message.Message):
     id = 0
     request_id = twp.fields.Int()
     arguments = Parameters()
 
-class Reply(twp.fields.Message):
+class Reply(twp.message.Message):
     id = 1
     request_id = twp.fields.Int()
     result = Double()
 
-class Error(twp.fields.Message):
+class Error(twp.message.Message):
     id = 2
     text = twp.fields.String()
 
