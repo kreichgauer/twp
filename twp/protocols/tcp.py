@@ -13,7 +13,7 @@ class Double(twp.fields.Primitive):
     @staticmethod
     def unmarshal(bytes):
         try:
-            return struct.unpack("!d", bytes)
+            return struct.unpack("!d", bytes)[0]
         except struct.error:
             raise twp.error.TWPError("Failed to decode Double from %s" % value)
 
@@ -21,6 +21,7 @@ class Double(twp.fields.Primitive):
         try:
             return struct.pack("!BBd", self.tag, self._length, self.value)
         except struct.error:
+            import pdb;pdb.set_trace()
             raise twp.error.TWPError("Failed to encode Double from %s" % self.value)
 
 
@@ -103,7 +104,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
     def __init__(self, *args, **kwargs):
         twp.protocol.TWPConsumer.__init__(self, *args, **kwargs)
         self.request = None
-        self.operands = []
+        self.operands = {}
 
     def get_twp_client(self, host, port):
         return twp.protocol.TWPClientAsync(host, port, 
@@ -111,15 +112,15 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
 
     def on_message(self, msg):
         if isinstance(msg, Request):
-            self.perform_request(msg)
+            self.handle_request(msg)
         else:
             self.send_error("Expected a request.")
 
     def handle_request(self, req):
         self.request = req
-        for i in range(2):
+        for i in range(len(req.arguments)):
             operand = req.arguments[i]
-            self.evaluate_operand(operand, i)
+            self.handle_operand(operand, i)
         self.send_result_if_complete()
 
     def handle_operand(self, op, i):
@@ -128,7 +129,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         if case == 0:
             assert(isinstance(op, float))
             self.operands[i] = op
-        elif case == 2:
+        elif case == 1:
             self.evaluate_operand(op, i)
         else:
             self.send_error("Invalid op case?")
@@ -156,19 +157,19 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         self.send_result_if_complete()
 
     def send_result_if_complete(self):
-        if len(self.results) != 2:
+        if len(self.operands) != len(self.request.arguments):
             return
         result = self.perform_operation()
-        reply = Reply(self.request.request_id, (0, result))
-        self.send_twp_value(reply)
+        reply = Reply(self.request.request_id, result)
+        self.send_twp(reply)
         self.close()
 
     def perform_operation(self):
-        return sum(self.operands)
+        return sum(self.operands.values())
 
     def send_error(self, text, close=True):
         err = Error(text)
-        self.send_twp_value(err)
+        self.send_twp(err)
         if close:
             self.close()
 
