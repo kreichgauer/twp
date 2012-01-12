@@ -175,5 +175,6 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         if close:
             self.close()
 
+
 class TCPClient(twp.protocol.TWPClient):
     protocol_class = CalculatorProtocol

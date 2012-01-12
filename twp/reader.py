@@ -1,5 +1,6 @@
 import struct
 from twp import log
+from twp.message import Extension
 from twp.error import TWPError, EndOfContent
 
 class TWPReader(object):
@@ -167,8 +168,16 @@ class TWPReader(object):
     def read_application_type(self, tag):
         return self.connection.protocol.read_application_type(tag)
 
-    def read_extension(self, tag):
-        raise TWPError("Cannot handle extension %s" % tag)
+    def read_extension(self, tag=None):
+        tag = tag or self.read_tag()
+        if tag != 12:
+            raise TWPError("Expected extension tag but saw %d" % tag)
+        id = self.read_bytes(4)
+        id = struct.unpack("!I", id)[0]
+        values = self.read_complex()
+        ext = Extension(id=id, values=values)
+        return Extension
+        
 
 
 class ReaderError(Exception):
