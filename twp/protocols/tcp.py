@@ -165,7 +165,6 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         reply = Reply(self.request.request_id, result)
         log.debug("Reply for %d: %s" % (reply.request_id, reply.result))
         self.send_twp(reply)
-        self.close()
 
     def perform_operation(self):
         return sum(self.operands.values())

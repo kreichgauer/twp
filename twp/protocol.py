@@ -116,7 +116,7 @@ class TWPClient(Connection):
 		self.socket.close()
 
 
-class TWPClientAsync(asyncore.dispatcher, Connection):
+class TWPClientAsync(asyncore.dispatcher_with_send, Connection):
 	def __init__(self, host, port, message_handler_func=None, protocol_class=None):
 		asyncore.dispatcher_with_send.__init__(self)
 		self.protocol_class = protocol_class
@@ -180,7 +180,6 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			return
 		self.reader.flush()
 		self.has_read_magic = True
-		log.debug("Read TWP magic")
 
 	def read_protocol_id(self):
 		id = self.reader.read_int()
@@ -190,7 +189,6 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			return
 		self.reader.flush()
 		self.has_read_protocol_id = True
-		log.debug("Protodocol %d" % id)
 
 	def on_message(self, message):
 		log.debug("Recvd message: %s" % message)
