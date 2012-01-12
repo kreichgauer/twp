@@ -61,7 +61,7 @@ class Connection(object):
 		"""Send pretty much anything that can be marshalled."""
 		# FIXME marshalling should support writing to socket
 		data = marshalling.marshal(twp_value)
-		self.write(data)
+		self.send(data)
 
 	def _read_message(self):
 		"""Have the reader read a complete TWP value (usually a message) from 
@@ -105,9 +105,9 @@ class TWPClient(Connection):
 
 	def _init_session(self):
 		protocol_id = marshalling.marshal_int(self.protocol.protocol_id)
-		self.write(TWP_MAGIC + protocol_id)
+		self.send(TWP_MAGIC + protocol_id)
 
-	def write(self, data):
+	def send(self, data):
 		data = bytes(data)
 		self.socket.sendall(data)
 		log.debug('Sent data: %r' % data)
@@ -117,18 +117,24 @@ class TWPClient(Connection):
 
 
 class TWPClientAsync(asyncore.dispatcher, Connection):
-	def __init__(self, host, port, message_handler_func=None):
+	def __init__(self, host, port, message_handler_func=None, protocol_class=None):
 		asyncore.dispatcher_with_send.__init__(self)
+		self.protocol_class = protocol_class
 		Connection.__init__(self)
 		self.message_handler_func = message_handler_func
 		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.connect( (host, port) )
+		self._init_session()
+
+	def _init_session(self):
+		protocol_id = marshalling.marshal_int(self.protocol.protocol_id)
+		self.send(TWP_MAGIC + protocol_id)
 
 	# TODO TCP needs to know about closes as well...
 	def handle_read(self):
 		msg = self.read_message()
-		if message_handler_func:
-			message_handler_func(msg, self)
+		if self.message_handler_func:
+			self.message_handler_func(msg, self)
 
 
 
@@ -150,6 +156,9 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			else:
 				message = self.read_message()
 				self.on_message(message)
+			if self.reader.remaining_byte_length:
+				# We did not process all the bytes, read again
+				self.handle_read()
 		except reader.ReaderError as e:
 			log.warn(e)
 			self.close()
@@ -162,9 +171,6 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 		log.warn("Client disconnected (%s %s)" % self._addr)
 		return asyncore.dispatcher_with_send.handle_close(self)
 
-	def write(self, data):
-		self.send(data)
-
 	def read_twp_magic(self):
 		magic_length = len(TWP_MAGIC)
 		magic = self.reader.read_bytes(magic_length)
@@ -174,6 +180,7 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			return
 		self.reader.flush()
 		self.has_read_magic = True
+		log.debug("Read TWP magic")
 
 	def read_protocol_id(self):
 		id = self.reader.read_int()
@@ -183,6 +190,7 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			return
 		self.reader.flush()
 		self.has_read_protocol_id = True
+		log.debug("Protodocol %d" % id)
 
 	def on_message(self, message):
 		log.debug("Recvd message: %s" % message)

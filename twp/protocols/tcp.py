@@ -1,5 +1,5 @@
 import struct
-import twp
+from twp import log
 import twp.fields
 import twp.message
 import twp.protocol
@@ -108,6 +108,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
 
     def get_twp_client(self, host, port):
         return twp.protocol.TWPClientAsync(host, port, 
+            protocol_class = self.protocol_class,
             message_handler_func=self.handle_expression_result)
 
     def on_message(self, msg):
@@ -117,6 +118,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             self.send_error("Expected a request.")
 
     def handle_request(self, req):
+        log.debug("Received request (%d): %s " % (req.request_id, req.arguments))
         self.request = req
         for i in range(len(req.arguments)):
             operand = req.arguments[i]
@@ -143,10 +145,10 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             host = twp.utils.unpack_ip6(host)
         req = Request(i, arguments)
         client = self.get_twp_client(host, port)
-        client.send_message(req)
+        client.send_twp(req)
 
     def handle_expression_result(self, msg, client):
-        self.client.close()
+        client.close()
         if not isinstance(msg, Reply):
             # TODO send error to *our* client
             self.close()
@@ -161,6 +163,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             return
         result = self.perform_operation()
         reply = Reply(self.request.request_id, result)
+        log.debug("Reply for %d: %s" % (reply.request_id, reply.result))
         self.send_twp(reply)
         self.close()
 
