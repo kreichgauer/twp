@@ -116,6 +116,22 @@ class TWPClient(Connection):
 		self.socket.close()
 
 
+class TWPClientAsync(asyncore.dispatcher, Connection):
+	def __init__(self, host, port, message_handler_func=None):
+		asyncore.dispatcher_with_send.__init__(self)
+		Connection.__init__(self)
+		self.message_handler_func = message_handler_func
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.connect( (host, port) )
+
+	# TODO TCP needs to know about closes as well...
+	def handle_read(self):
+		msg = self.read_message()
+		if message_handler_func:
+			message_handler_func(msg, self)
+
+
+
 class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 	def __init__(self, sock, addr):
 		asyncore.dispatcher_with_send.__init__(self, sock)

@@ -108,7 +108,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
 
     def get_twp_client(self, host, port):
         return twp.protocol.TWPClientAsync(host, port, 
-            message_handler=self.handle_expression_result)
+            message_handler_func=self.handle_expression_result)
 
     def on_message(self, msg):
         if isinstance(msg, Request):

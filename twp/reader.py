@@ -86,9 +86,9 @@ class TWPReader(object):
             return self.read_union(tag)
         elif tag == 12:
             return self.read_extension()
-        elif tag in (13, 15):
+        elif tag in range(13, 15):
             return self.read_int(tag)
-        elif tag in (15, 17):
+        elif tag in range(15, 17):
             return self.read_binary(tag)
         elif tag in range(17, 128):
             return self.read_string(tag)
