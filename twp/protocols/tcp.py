@@ -1,3 +1,4 @@
+import operator
 import struct
 from twp import log
 import twp.fields
@@ -96,19 +97,90 @@ class CalculatorProtocol(twp.protocol.Protocol):
         value = reader.read_bytes(8)
         return Double.unmarshal(value)
 
-
-class OperatorImplementation(twp.protocol.TWPConsumer):
-    protocol_class = CalculatorProtocol
-        
-    def __init__(self, *args, **kwargs):
-        twp.protocol.TWPConsumer.__init__(self, *args, **kwargs)
+class RequestHandler():
+    def __init__(self, consumer):
+        self.consumer = consumer
         self.request = None
         self.operands = {}
 
     def get_twp_client(self, host, port):
         return twp.protocol.TWPClientAsync(host, port, 
-            protocol_class = self.protocol_class,
-            message_handler_func=self.handle_expression_result)
+            protocol_class = self.consumer.protocol_class,
+            message_handler_func=self.handle_expression_result,
+            )#error_handler_func=self.handle_expression_error)
+
+    def handle(self, request):
+        if self.request:
+            raise ValueError("Already handling %s" % self.request)
+        self.request = request
+        for idx in range(len(request.arguments)):
+            operand = request.arguments[idx]
+            self.handle_operand(operand, idx)
+        self.send_result_if_complete()
+
+    def handle_operand(self, op, arg_idx):
+        # op is a union value
+        case, op = op
+        if case == 0:
+            assert(isinstance(op, float))
+            self.operands[arg_idx] = op
+        elif case == 1:
+            self.evaluate_operand(op, arg_idx)
+        else:
+            self.send_error("Invalid op case?")
+
+    def evaluate_operand(self, op, arg_idx):
+        # op is an tcp.Expression value
+        host, port, arguments = op
+        try:
+            host = twp.utils.unpack_ip(host)
+        except ValueError:
+            host = twp.utils.unpack_ip6(host)
+        req = Request(arg_idx, arguments)
+        client = self.get_twp_client(host, port)
+        client.send_twp(req)
+
+    def handle_expression_result(self, msg, client):
+        client.close()
+        if not isinstance(msg, Reply):
+            log.warn("Expected reply, but got: %s" % msg)
+            self.send_error("Unexpected message from intermediate.")
+            self.close()
+            return
+        rid = msg.request_id
+        # TODO sanity check rid
+        self.operands[rid] = msg.result
+        self.send_result_if_complete()
+
+    def handle_expression_error(self, client):
+        self.send_error("Intermediate failed to deliver result.")
+        client.close()
+
+    def send_result_if_complete(self):
+        if len(self.operands) != len(self.request.arguments):
+            return
+        result = self.perform_operation()
+        reply = Reply(self.request.request_id, result)
+        log.debug("Reply for %s: %s" % (reply.request_id, reply.result))
+        self.consumer.send_twp(reply)
+
+    def perform_operation(self):
+        return self.consumer.operator_function(*self.operands.values())
+
+    def send_error(self, text, close=True):
+        err = Error(text)
+        self.consumer.send_twp(err)
+        if close:
+            self.consumer.close()
+
+
+class OperatorImplementation(twp.protocol.TWPConsumer):
+    protocol_class = CalculatorProtocol
+    operator_function = operator.add
+        
+    def __init__(self, *args, **kwargs):
+        twp.protocol.TWPConsumer.__init__(self, *args, **kwargs)
+        self.request = None
 
     def on_message(self, msg):
         if isinstance(msg, Request):
@@ -118,61 +190,8 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
 
     def handle_request(self, req):
         log.debug("Received request (%s): %s " % (req.request_id, req.arguments))
-        self.request = req
-        for i in range(len(req.arguments)):
-            operand = req.arguments[i]
-            self.handle_operand(operand, i)
-        self.send_result_if_complete()
-
-    def handle_operand(self, op, i):
-        # op is a union value
-        case, op = op
-        if case == 0:
-            assert(isinstance(op, float))
-            self.operands[i] = op
-        elif case == 1:
-            self.evaluate_operand(op, i)
-        else:
-            self.send_error("Invalid op case?")
-
-    def evaluate_operand(self, op, i):
-        # op is an tcp.Expression value
-        host, port, arguments = op
-        try:
-            host = twp.utils.unpack_ip(host)
-        except ValueError:
-            host = twp.utils.unpack_ip6(host)
-        req = Request(i, arguments)
-        client = self.get_twp_client(host, port)
-        client.send_twp(req)
-
-    def handle_expression_result(self, msg, client):
-        client.close()
-        if not isinstance(msg, Reply):
-            # TODO send error to *our* client
-            self.close()
-            return
-        rid = msg.request_id
-        # TODO sanity check rid
-        self.operands[rid] = msg.result
-        self.send_result_if_complete()
-
-    def send_result_if_complete(self):
-        if len(self.operands) != len(self.request.arguments):
-            return
-        result = self.perform_operation()
-        reply = Reply(self.request.request_id, result)
-        log.debug("Reply for %s: %s" % (reply.request_id, reply.result))
-        self.send_twp(reply)
-
-    def perform_operation(self):
-        return sum(self.operands.values())
-
-    def send_error(self, text, close=True):
-        err = Error(text)
-        self.send_twp(err)
-        if close:
-            self.close()
+        handler = RequestHandler(self)
+        handler.handle(req)
 
 
 class TCPClient(twp.protocol.TWPClient):
