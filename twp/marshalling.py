@@ -9,7 +9,7 @@ def marshal(val):
     """Marshal anything that can be sent over a connection, i.e. Message, 
     Extension, or primitive value."""
     if isinstance(val, Message):
-        return _marshal_complex(val)
+        return marshal_message(val)
     elif isinstance(val, Extension):
         return marshal_extension(val)
     else:
@@ -21,29 +21,36 @@ def _marshal_field(field):
     elif isinstance(field, Primitive):
         return marshal_value(field.value)
     elif isinstance(field, Struct):
-        return _marshal_complex(field)
+        return _marshal_struct(field)
     elif isinstance(field, Sequence):
         return _marshal_sequence(field)
     elif isinstance(field, Union):
         return _marshal_union(field)
     elif isinstance(field, AnyDefinedBy):
         return _marshal_any_defined_by(field)
+    elif isinstance(field, Extension):
+        return marshal_extension(field)
     else:
         raise ValueError("Not a supported field %s" % field)
 
-def _marshal_complex(complex):
-    """Marshals an instance of `twp.fields.Complex`"""
+def marshal_message(message):
+    tag = _marshal_tag(message.tag)
+    values = [_marshal_field(field) for field in message.get_fields()]
+    extensions = [marshal_extension(ext) for ext in message.extensions]
+    return tag + b"".join(values) + b"".join(extensions) + EOC
+
+def _marshal_struct(complex):
     tag = _marshal_tag(complex.tag)
     values = [_marshal_field(field) for field in complex.get_fields()]
     return tag + b"".join(values) + EOC
 
-def _marshal_extension(extension):
+def marshal_extension(extension):
     tag = _marshal_tag(extension.tag)
-    id = struct.pack("!I", extension.registered_id)[0]
+    id = struct.pack("!I", extension.registered_id)
     if isinstance(extension, RegisteredExtension):
         values = b"".join([_marshal_field(field) for field in complex.get_fields()])
     else:
-        values = extension.raw
+        values = extension.raw or b'\1'
     return tag + id + values + EOC
 
 def _marshal_sequence(sequence):

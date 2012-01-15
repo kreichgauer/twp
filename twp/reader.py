@@ -39,7 +39,8 @@ class TWPReader(object):
             if not self._read_from_connection():
                 raise ReaderError("Connection closed")
         if self.remaining_byte_length < length:
-            raise ValueError("Not enough bytes")
+            log.debug("Not enough bytes to unmarshal")
+            raise NotEnoughBytes()
 
     def _read_from_connection(self, size=1024):
         try:
@@ -87,7 +88,7 @@ class TWPReader(object):
         elif tag in range(4,12): 
             return self.read_union(tag)
         elif tag == 12:
-            return self.read_extension()
+            return self.read_extension(tag)
         elif tag in range(13, 15):
             return self.read_int(tag)
         elif tag in range(15, 17):
@@ -193,8 +194,11 @@ class TWPReader(object):
         # Pass the raw bytes so we don't have to marshal this when forwarding
         raw = self.buffer[start_pos:end_pos]
         ext = Extension(id, values, raw=raw)
-        return Extension
+        return ext
 
 
 class ReaderError(Exception):
+    pass
+
+class NotEnoughBytes(ReaderError):
     pass

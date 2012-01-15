@@ -39,6 +39,7 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
 
 #FIXME
 class Extension(Message):
+    tag = 12
     def __init__(self, id, values, raw=None):
         self.registered_id = id
         self.values = values

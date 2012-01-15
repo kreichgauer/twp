@@ -160,7 +160,7 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			initial_pos = self.reader.pos
 			if not self.has_read_magic:
 				self.read_twp_magic()
-			elif not self.has_read_protocol_id:
+			if not self.has_read_protocol_id:
 				self.read_protocol_id()
 			else:
 				message = self.read_message()
@@ -168,12 +168,13 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			if self.reader.remaining_byte_length:
 				# We did not process all the bytes, read again
 				self.handle_read()
-		except ValueError:
+		except reader.NotEnoughBytes:
 			# Rewind
 			self.reader.pos = initial_pos
 		except reader.ReaderError as e:
 			log.warn(e)
 			self.close()
+
 
 	def handle_close(self):
 		log.warn("Client disconnected (%s %s)" % self._addr)
