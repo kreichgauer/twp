@@ -98,6 +98,15 @@ class TWPClient(Connection):
 		data = bytes(data)
 		self.socket.sendall(data)
 
+	def read_message(self):
+		# Blocking socket, just keep trying
+		while True:
+			try:
+				return super(TWPClient, self).read_message()
+			except ValueError:
+				log.debug("need more bytes")
+				pass
+
 	def close(self):
 		self.socket.close()
 

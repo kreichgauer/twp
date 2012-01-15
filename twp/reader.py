@@ -35,7 +35,8 @@ class TWPReader(object):
     def _ensure_buffer_length(self, length):
         """Make sure we have at least length unprocessed bytes on the buffer. 
         Read more bytes into the buffer if neccessary."""
-        self._read_from_connection()
+        if self.remaining_byte_length < length:
+            self._read_from_connection()
         if self.remaining_byte_length < length:
             raise ValueError("Not enough bytes")
 
