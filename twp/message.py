@@ -1,6 +1,10 @@
 from twp import fields
 
 class Message(fields._Complex, metaclass=fields._ComplexType):
+    def __init__(self, *args, **kwargs):
+        self.extensions = kwargs.pop("extensions", [])
+        super(Message, self).__init__(*args, **kwargs)
+
     def update_values(self, *args, **kwargs):       
         if len(args) > len(self._fields):
             raise ValueError("Too many positional args")
@@ -34,4 +38,15 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
 
 
 #FIXME
-class Extension(Message): pass
+class Extension(Message):
+    def __init__(self, id, values, raw=None):
+        self.registered_id = id
+        self.values = values
+        # Used for forwarding unknown extensions
+        self.raw = raw
+
+    def __repr__(self):
+        return "Extension %d: %s" % (self.registered_id, self.values)
+
+class RegisteredExtension(Extension):
+    pass

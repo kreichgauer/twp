@@ -25,15 +25,14 @@ class Protocol(object):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
 
-	def build_message(self, id, values, raw):
-		msg_type = None
+	def build_message(self, id, values, extensions, raw):
 		for cls in self.message_types:
 			if cls.id == id:
 				msg_type = cls
 				break
 		if not msg_type:
 			raise TWPError("Message not understood: %d" % tag)
-		msg = msg_type(*values)
+		msg = msg_type(*values, extensions=extensions)
 		return msg
 
 	def read_application_type(self, tag):
@@ -63,24 +62,11 @@ class Connection(object):
 		data = marshalling.marshal(twp_value)
 		self.send(data)
 
-	def _read_message(self):
-		"""Have the reader read a complete TWP value (usually a message) from 
-		the socket."""
-		# This is slightly inefficient, because a server could continue serving 
-		# other clients if someone sent an incomplete message. Instead we just 
-		# keep reading in a blocking manner, until the message is complete. Also
-		# good way for DoS.
-		value = self.reader.read_message()
-		raw = self.reader.processed_bytes
-		log.debug("Parsed %s into %s" % (raw, value))
-		self.reader.flush()
-		return value, raw
-
 	def read_message(self):
-		value, raw = self._read_message()
-		# Let's assume it's a message
-		id, values = value
-		message = self.protocol.build_message(id, values, raw)
+		id, values, extensions = self.reader.read_message()
+		raw = self.reader.processed_bytes
+		self.reader.flush()
+		message = self.protocol.build_message(id, values, extensions, raw)
 		return message
 
 

@@ -79,8 +79,7 @@ class _Complex(Base, metaclass=_ComplexType):
 			self.update_values(**values)
 
 	def __repr__(self):
-		return "%s %s %s" % (self.__class__.__name__, self.name, 
-			dict(self._fields))
+		return "%s %s" % (self.__class__.__name__, dict(self._fields))
 
 
 class Struct(_Complex):

@@ -1,6 +1,6 @@
 import struct
 from twp.fields import *
-from twp.message import Message, Extension
+from twp.message import Message, Extension, RegisteredExtension
 
 EOC = b"\0"
 NO_VAL = b"\1"
@@ -36,6 +36,15 @@ def _marshal_complex(complex):
     tag = _marshal_tag(complex.tag)
     values = [_marshal_field(field) for field in complex.get_fields()]
     return tag + b"".join(values) + EOC
+
+def _marshal_extension(extension):
+    tag = _marshal_tag(extension.tag)
+    id = struct.pack("!I", extension.registered_id)[0]
+    if isinstance(extension, RegisteredExtension):
+        values = b"".join([_marshal_field(field) for field in complex.get_fields()])
+    else:
+        values = extension.raw
+    return tag + id + values + EOC
 
 def _marshal_sequence(sequence):
     type_field = sequence.type

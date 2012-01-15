@@ -21,7 +21,6 @@ class Double(twp.fields.Primitive):
         try:
             return struct.pack("!BBd", self.tag, self._length, self.value)
         except struct.error:
-            import pdb;pdb.set_trace()
             raise twp.error.TWPError("Failed to encode Double from %s" % self.value)
 
 
@@ -118,7 +117,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             self.send_error("Expected a request.")
 
     def handle_request(self, req):
-        log.debug("Received request (%d): %s " % (req.request_id, req.arguments))
+        log.debug("Received request (%s): %s " % (req.request_id, req.arguments))
         self.request = req
         for i in range(len(req.arguments)):
             operand = req.arguments[i]
@@ -163,7 +162,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             return
         result = self.perform_operation()
         reply = Reply(self.request.request_id, result)
-        log.debug("Reply for %d: %s" % (reply.request_id, reply.result))
+        log.debug("Reply for %s: %s" % (reply.request_id, reply.result))
         self.send_twp(reply)
 
     def perform_operation(self):

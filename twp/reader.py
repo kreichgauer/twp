@@ -105,22 +105,34 @@ class TWPReader(object):
         while True:
             try:
                 val = self.read_value()
-                if val is None:
-                    # No value tag?
-                    break
                 values.append(val)
             except EndOfContent:
                 break
         return values
 
+    def _read_message(self):
+        values = []
+        extensions = []
+        while True:
+            try:
+                val = self.read_value()
+                if isinstance(val, Extension):
+                    extensions.append(val)
+                else:
+                    values.append(val)
+            except EndOfContent:
+                break
+        return values, extensions
+
     def read_message(self, tag=None):
-        """Read a message (or union) from the stream. Returns the id (or case) 
-        and values."""
+        """Read a message (or union) from the stream. Returns the id, values and
+        extensions."""
         tag = tag or self.read_tag()
         if not 4 <= tag <= 11:
             raise TWPError("Expected message tag but saw %d" % tag)
         id = tag - 4 # or union case
-        return id, self.read_complex()
+        values, extensions = self._read_message()
+        return id, values, extensions
 
     def read_union(self, tag=None):
         tag = tag or self.read_tag()
@@ -169,15 +181,18 @@ class TWPReader(object):
         return self.connection.protocol.read_application_type(tag)
 
     def read_extension(self, tag=None):
+        start_pos = self.pos
         tag = tag or self.read_tag()
         if tag != 12:
             raise TWPError("Expected extension tag but saw %d" % tag)
         id = self.read_bytes(4)
         id = struct.unpack("!I", id)[0]
         values = self.read_complex()
-        ext = Extension(id=id, values=values)
+        end_pos = self.pos
+        # Pass the raw bytes so we don't have to marshal this when forwarding
+        raw = self.buffer[start_pos:end_pos]
+        ext = Extension(id, values, raw=raw)
         return Extension
-        
 
 
 class ReaderError(Exception):
