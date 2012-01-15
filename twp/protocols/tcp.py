@@ -137,6 +137,8 @@ class RequestHandler():
         except ValueError:
             host = twp.utils.unpack_ip6(host)
         req = Request(arg_idx, arguments)
+        # Forward all extensions
+        req.extensions = self.request.extensions
         client = self.get_twp_client(host, port)
         client.send_twp(req)
 

@@ -183,14 +183,14 @@ class TWPReader(object):
         return self.connection.protocol.read_application_type(tag)
 
     def read_extension(self, tag=None):
-        start_pos = self.pos
         tag = tag or self.read_tag()
         if tag != 12:
             raise TWPError("Expected extension tag but saw %d" % tag)
         id = self.read_bytes(4)
         id = struct.unpack("!I", id)[0]
+        start_pos = self.pos
         values = self.read_complex()
-        end_pos = self.pos
+        end_pos = self.pos - 1 # -1 for EOC
         # Pass the raw bytes so we don't have to marshal this when forwarding
         raw = self.buffer[start_pos:end_pos]
         ext = Extension(id, values, raw=raw)
