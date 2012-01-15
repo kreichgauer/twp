@@ -1,4 +1,5 @@
 import struct
+import socket
 from twp import log
 from twp.message import Extension
 from twp.error import TWPError, EndOfContent
@@ -34,17 +35,15 @@ class TWPReader(object):
     def _ensure_buffer_length(self, length):
         """Make sure we have at least length unprocessed bytes on the buffer. 
         Read more bytes into the buffer if neccessary."""
-        while self.remaining_byte_length < length:
-            # TODO what about evented servers? This will cause the whole server 
-            # to block until the current value is read completely while it 
-            # should really continue to serve other clients.
-            log.debug("Need %d bytes, but only have %d. Reading from socket and"
-                      " trying again." % (length, self.remaining_byte_length))
-            if not self._read_from_connection():
-                raise ReaderError("Connection closed")
+        self._read_from_connection()
+        if self.remaining_byte_length < length:
+            raise ValueError("Not enough bytes")
 
     def _read_from_connection(self, size=1024):
-        data = self.connection.recv(self._recvsize)
+        try:
+            data = self.connection.recv(self._recvsize)
+        except socket.error:
+            return False
         if not len(data):
             return False
         log.debug("Recvd %d bytes:\n%s" % (len(data), data))

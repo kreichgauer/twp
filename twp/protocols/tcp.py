@@ -141,6 +141,7 @@ class RequestHandler():
         client.send_twp(req)
 
     def handle_expression_result(self, msg, client):
+        log.warn("Result from async client %s" % msg)
         client.close()
         if not isinstance(msg, Reply):
             log.warn("Expected reply, but got: %s" % msg)
@@ -153,6 +154,7 @@ class RequestHandler():
         self.send_result_if_complete()
 
     def handle_expression_error(self, client):
+        log.warn("Error from async client")
         self.send_error("Intermediate failed to deliver result.")
         client.close()
 

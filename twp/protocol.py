@@ -58,9 +58,10 @@ class Connection(object):
 
 	def send_twp(self, twp_value):
 		"""Send pretty much anything that can be marshalled."""
-		# FIXME marshalling should support writing to socket
+		log.debug("Sending TWP value %s" % twp_value)
 		data = marshalling.marshal(twp_value)
 		self.send(data)
+		log.debug("Sent data %s" % data)
 
 	def read_message(self):
 		id, values, extensions = self.reader.read_message()
@@ -96,7 +97,6 @@ class TWPClient(Connection):
 	def send(self, data):
 		data = bytes(data)
 		self.socket.sendall(data)
-		log.debug('Sent data: %r' % data)
 
 	def close(self):
 		self.socket.close()
@@ -109,19 +109,22 @@ class TWPClientAsync(asyncore.dispatcher_with_send, Connection):
 		Connection.__init__(self)
 		self.message_handler_func = message_handler_func
 		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		log.debug("Async client connecting to %s %s" % (host, port))
 		self.connect( (host, port) )
-		self._init_session()
-
-	def _init_session(self):
 		protocol_id = marshalling.marshal_int(self.protocol.protocol_id)
-		self.send(TWP_MAGIC + protocol_id)
+		self.out_buffer += TWP_MAGIC
+		self.out_buffer += protocol_id
 
 	# TODO TCP needs to know about closes as well...
 	def handle_read(self):
-		msg = self.read_message()
-		if self.message_handler_func:
-			self.message_handler_func(msg, self)
-
+		try:
+			initial_pos = self.reader.pos
+			msg = self.read_message()
+			if self.message_handler_func:
+				self.message_handler_func(msg, self)
+		except ValueError:
+			# Rewind
+			self.reader.pos = initial_pos
 
 
 class TWPConsumer(asyncore.dispatcher_with_send, Connection):
@@ -135,6 +138,7 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 
 	def handle_read(self):
 		try:
+			initial_pos = self.reader.pos
 			if not self.has_read_magic:
 				self.read_twp_magic()
 			elif not self.has_read_protocol_id:
@@ -145,12 +149,11 @@ class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 			if self.reader.remaining_byte_length:
 				# We did not process all the bytes, read again
 				self.handle_read()
+		except ValueError:
+			# Rewind
+			self.reader.pos = initial_pos
 		except reader.ReaderError as e:
 			log.warn(e)
-			self.close()
-		except Exception as e:
-			import traceback
-			traceback.print_exc()
 			self.close()
 
 	def handle_close(self):
