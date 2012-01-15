@@ -135,6 +135,16 @@ class TWPClientAsync(asyncore.dispatcher_with_send, Connection):
 			# Rewind
 			self.reader.pos = initial_pos
 
+	def send_twp(self, twp_value):
+		"""Send pretty much anything that can be marshalled."""
+		log.debug("Sending TWP value %s" % twp_value)
+		data = marshalling.marshal(twp_value)
+		# bug in asyncore? When we .send() while handling another receive, this 
+		# client sometimes does not end up in the write queue.
+		# Work around: don't send right away, just buffer
+		self.out_buffer += data
+		log.debug("Sent data %s" % data)
+
 
 class TWPConsumer(asyncore.dispatcher_with_send, Connection):
 	def __init__(self, sock, addr):

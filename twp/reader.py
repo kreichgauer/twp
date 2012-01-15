@@ -36,7 +36,8 @@ class TWPReader(object):
         """Make sure we have at least length unprocessed bytes on the buffer. 
         Read more bytes into the buffer if neccessary."""
         if self.remaining_byte_length < length:
-            self._read_from_connection()
+            if not self._read_from_connection():
+                raise ReaderError("Connection closed")
         if self.remaining_byte_length < length:
             raise ValueError("Not enough bytes")
 
@@ -44,7 +45,7 @@ class TWPReader(object):
         try:
             data = self.connection.recv(self._recvsize)
         except socket.error:
-            return False
+            raise
         if not len(data):
             return False
         log.debug("Recvd %d bytes:\n%s" % (len(data), data))
