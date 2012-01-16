@@ -1,7 +1,7 @@
 import struct
 import socket
 from twp import log
-from twp.message import Extension
+from twp.message import Extension, UnknownExtension
 from twp.error import TWPError, EndOfContent
 
 class TWPReader(object):
@@ -193,7 +193,7 @@ class TWPReader(object):
         end_pos = self.pos - 1 # -1 for EOC
         # Pass the raw bytes so we don't have to marshal this when forwarding
         raw = self.buffer[start_pos:end_pos]
-        ext = Extension(id, values, raw=raw)
+        ext = UnknownExtension(id, values, raw=raw)
         return ext
 
 

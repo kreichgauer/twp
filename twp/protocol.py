@@ -7,6 +7,8 @@ BUFSIZE = 1024
 TWP_MAGIC = b"TWP3\n"
 
 class Protocol(object):
+	message_types = []
+	extension_types = []
 	def init_connection(self, connection):
 		# FIXME delete?
 		self.connection = connection
@@ -24,6 +26,19 @@ class Protocol(object):
 	def message_types(self):
 		"""Implement to return a list of supported types for the protocol."""
 		raise NotImplementedError
+
+	def build_extensions(self, extensions):
+		ext_out = []
+		for ext in extensions:
+			extension_cls = None
+			for cls in self.extension_types:
+				if cls.registered_id == ext.registered_id:
+					extension_cls = cls
+					break
+			if extension_cls:
+				ext = extension_cls(*ext.values)
+			ext_out.append(ext)
+		return ext_out
 
 	def build_message(self, id, values, extensions, raw):
 		for cls in self.message_types:
@@ -67,6 +82,7 @@ class Connection(object):
 		id, values, extensions = self.reader.read_message()
 		raw = self.reader.processed_bytes
 		self.reader.flush()
+		extensions = self.protocol.build_extensions(extensions)
 		message = self.protocol.build_message(id, values, extensions, raw)
 		return message
 

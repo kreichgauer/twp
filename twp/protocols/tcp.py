@@ -78,12 +78,21 @@ class Error(twp.message.Message):
     id = 2
     text = twp.fields.String()
 
+class ThreadID(twp.message.Extension):
+    registered_id = 42
+    tid = twp.fields.Int()
+    depth = twp.fields.Int()
+
+
 class CalculatorProtocol(twp.protocol.Protocol):
     protocol_id = 5
     message_types = [
         Request,
         Reply,
         Error,
+    ]
+    extension_types = [
+        ThreadID,
     ]
 
     def read_application_type(self, tag):
@@ -138,9 +147,13 @@ class RequestHandler():
             host = twp.utils.unpack_ip6(host)
         req = Request(arg_idx, arguments)
         # Forward all extensions
-        req.extensions = self.request.extensions
+        self._add_request_extensions(req)
         client = self.get_twp_client(host, port)
         client.send_twp(req)
+
+    def _add_request_extensions(self, req):
+        # TODO add TID 
+        req.extensions = self.request.extensions
 
     def handle_expression_result(self, msg, client):
         log.warn("Result from async client %s" % msg)
@@ -187,6 +200,7 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         self.request = None
 
     def on_message(self, msg):
+        log.debug("Received message %s" % msg)
         if isinstance(msg, Request):
             self.handle_request(msg)
         else:

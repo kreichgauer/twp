@@ -44,6 +44,11 @@ class Message(fields._Complex, metaclass=fields._ComplexType):
 #FIXME
 class Extension(Message):
     tag = 12
+    
+    def __repr__(self):
+        return "Extension %s: %s" % (self.__class__.__name__, dict(self._fields))
+
+class UnknownExtension(Extension):
     def __init__(self, id, values, raw=None):
         self.registered_id = id
         self.values = values
@@ -52,6 +57,3 @@ class Extension(Message):
 
     def __repr__(self):
         return "Extension %d: %s" % (self.registered_id, self.values)
-
-class RegisteredExtension(Extension):
-    pass
