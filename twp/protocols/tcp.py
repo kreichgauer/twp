@@ -196,7 +196,7 @@ class RequestHandler():
         self.consumer.send_twp(reply)
 
     def perform_operation(self):
-        return self.consumer.operator_function(*self.operands.values())
+        return self.consumer.operator_function(self.operands.values())
 
     def send_error(self, text, close=True):
         err = Error(text)
@@ -211,8 +211,8 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
         
     def __init__(self, *args, **kwargs):
         # TODO
+        self.operator_function = kwargs.pop("op_func", self.operator_function)
         twp.protocol.TWPConsumer.__init__(self, *args, **kwargs)
-        import pdb;pdb.set_trace()
         self.name = "mk %s %s" % self.getsockname()
         self._log_client = None
 
@@ -245,8 +245,9 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
             thread_id = msg.get_thread_id()
             if thread_id:
                 le.thread_id = "%s" % thread_id._fields
-            le.text = "%s" % msg
-            self.get_log_client().send_twp(le)
+            le.text = "Request %s: %s" % (msg.id, msg.arguments)
+            # FIXME self.get_log_client().send_twp(le)
+            log.error("Would log to service: %s" % le)
         except:
             log.warn("logging service request failed")
             raise
@@ -254,6 +255,14 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
     def on_close(self):
         self.log_client.close()
 
+
+class TCPServer(twp.protocol.TWPServer):
+    def __init__(self, host, port, op_func=None):
+        self.op_func = op_func
+        twp.protocol.TWPServer.__init__(self, host, port, handler_class=OperatorImplementation)
+
+    def _get_handler(self, sock, addr):
+        return self.handler_class(sock, addr, op_func=self.op_func)
 
 
 class TCPClient(twp.protocol.TWPClient):
