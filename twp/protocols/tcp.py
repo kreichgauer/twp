@@ -1,9 +1,11 @@
 import operator
 import struct
+import time
 from twp import log
 import twp.fields
 import twp.message
 import twp.protocol
+import twp.protocols.logging
 import twp.error
 import twp.utils
 
@@ -68,6 +70,11 @@ class Request(twp.message.Message):
     id = 0
     request_id = twp.fields.Int()
     arguments = Parameters()
+
+    def get_thread_id(self):
+        for ext in self.extensions:
+            if isinstance(ext, ThreadID):
+                return ext
 
 class Reply(twp.message.Message):
     id = 1
@@ -203,8 +210,11 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
     operator_function = operator.add
         
     def __init__(self, *args, **kwargs):
+        # TODO
         twp.protocol.TWPConsumer.__init__(self, *args, **kwargs)
-        self.request = None
+        import pdb;pdb.set_trace()
+        self.name = "mk %s %s" % self.getsockname()
+        self._log_client = None
 
     def on_message(self, msg):
         log.debug("Received message %s" % msg)
@@ -215,8 +225,35 @@ class OperatorImplementation(twp.protocol.TWPConsumer):
 
     def handle_request(self, req):
         log.debug("Received request (%s): %s " % (req.request_id, req.arguments))
+        self.log_request(req)
         handler = RequestHandler(self)
         handler.handle(req)
+
+    def get_log_client(self):
+        if not self._log_client:
+            self._log_client = twp.protocol.TWPClientAsync(
+                'www.dcl.hpi.uni-potsdam.de', 80, 
+                protocol_class=twp.protocols.logging.LoggingProtocol)
+        return self._log_client
+
+    def log_request(self, msg):
+        try:
+            le = twp.protocols.logging.LogEntry()
+            le.seconds = int(time.time())
+            le.useconds = 0
+            le.source = self.name
+            thread_id = msg.get_thread_id()
+            if thread_id:
+                le.thread_id = "%s" % thread_id._fields
+            le.text = "%s" % msg
+            self.get_log_client().send_twp(le)
+        except:
+            log.warn("logging service request failed")
+            raise
+
+    def on_close(self):
+        self.log_client.close()
+
 
 
 class TCPClient(twp.protocol.TWPClient):
