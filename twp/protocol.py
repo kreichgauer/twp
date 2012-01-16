@@ -234,7 +234,10 @@ class TWPServer(asyncore.dispatcher):
 		pair = self.accept()
 		if not pair is None:
 			sock, addr = pair
-			handler = self.handler_class(sock, addr)
+			handler = self._get_handler(sock, addr)
+
+	def _get_handler(self, sock, addr):
+		return self.handler_class(sock, addr)
 
 	def serve_forever(self):
 		asyncore.loop()
