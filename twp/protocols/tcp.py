@@ -152,8 +152,15 @@ class RequestHandler():
         client.send_twp(req)
 
     def _add_request_extensions(self, req):
-        # TODO add TID 
-        req.extensions = self.request.extensions
+        has_tid = False
+        for ext in self.request.extensions:
+            if isinstance(ext, ThreadID):
+                ext = ThreadID(ext.tid, ext.depth + 1)
+                has_tid = True
+            req.extensions.append(ext)
+        if not has_tid:
+            tid = ThreadID(self.request.request_id, 1)
+            req.extensions.append(tid)
 
     def handle_expression_result(self, msg, client):
         log.warn("Result from async client %s" % msg)
